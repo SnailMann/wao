@@ -114,6 +114,10 @@ daily-cli search "人工智能" --source baidu
 - `ai` / `finance` 默认聚合 Google News RSS 与 Baidu 联想热点、热榜过滤结果。
 - Baidu 普通网页搜索较容易触发验证码，因此没有把它作为核心依赖接口。
 
+更详细的类别、来源、排序和降级逻辑说明见：
+
+- [docs/NEWS_PIPELINE.md](./docs/NEWS_PIPELINE.md)
+
 ## 测试
 
 ```bash
