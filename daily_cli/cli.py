@@ -5,7 +5,7 @@ import json
 
 from . import __version__
 from .output import render_json, render_text
-from .semantic import MODEL_REPO_ID, SemanticError, download_model, list_content_labels
+from .semantic import MODEL_REPO_ID, SemanticError, download_model, list_content_labels, list_filter_backends
 from .service import collect_presets, collect_search, collect_summary, list_presets
 
 
@@ -70,6 +70,12 @@ def add_common_fetch_args(parser: argparse.ArgumentParser) -> None:
         default=None,
         help="本地语义模型目录；默认使用 ~/.cache/daily-cli/models 下的预下载目录。",
     )
+    parser.add_argument(
+        "--filter-mode",
+        choices=list_filter_backends(),
+        default="tfidf",
+        help="标签/过滤模式，支持 model 或 tfidf。",
+    )
 
 
 def add_search_args(parser: argparse.ArgumentParser) -> None:
@@ -112,6 +118,12 @@ def add_search_args(parser: argparse.ArgumentParser) -> None:
         "--semantic-model-dir",
         default=None,
         help="本地语义模型目录；默认使用 ~/.cache/daily-cli/models 下的预下载目录。",
+    )
+    parser.add_argument(
+        "--filter-mode",
+        choices=list_filter_backends(),
+        default="tfidf",
+        help="标签/过滤模式，支持 model 或 tfidf。",
     )
 
 
@@ -228,6 +240,7 @@ def main(argv: list[str] | None = None) -> int:
                 semantic_filter=not args.no_semantic and not args.no_filter,
                 excluded_labels=tuple(args.exclude_label) if args.exclude_label else None,
                 semantic_model_dir=args.semantic_model_dir,
+                filter_mode=args.filter_mode,
             )
             print(emit_output(args.format, sections), end="")
             return 0
@@ -242,6 +255,7 @@ def main(argv: list[str] | None = None) -> int:
                 semantic_filter=not args.no_semantic and not args.no_filter,
                 excluded_labels=tuple(args.exclude_label) if args.exclude_label else None,
                 semantic_model_dir=args.semantic_model_dir,
+                filter_mode=args.filter_mode,
             )
             print(emit_output(args.format, sections), end="")
             return 0
@@ -256,6 +270,7 @@ def main(argv: list[str] | None = None) -> int:
                 semantic_filter=not args.no_semantic and not args.no_filter,
                 excluded_labels=tuple(args.exclude_label) if args.exclude_label else None,
                 semantic_model_dir=args.semantic_model_dir,
+                filter_mode=args.filter_mode,
             )
             print(emit_output(args.format, [section]), end="")
             return 0

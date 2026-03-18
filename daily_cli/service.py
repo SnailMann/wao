@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 from .models import NewsItem, SectionResult
 from .semantic import (
     DEFAULT_EXCLUDED_LABELS,
     MODEL_REPO_ID,
+    TFIDF_BACKEND_ID,
     get_semantic_labeler,
 )
 from .sources import (
@@ -123,7 +123,7 @@ PRESET_SPECS = {
         supported_sources=("google", "baidu"),
         default_sources=("google", "baidu"),
         default_limit=5,
-        default_excluded_labels=DEFAULT_EXCLUDED_LABELS,
+        default_excluded_labels=(),
     ),
     "finance": PresetSpec(
         key="finance",
@@ -132,7 +132,7 @@ PRESET_SPECS = {
         supported_sources=("google", "baidu"),
         default_sources=("google", "baidu"),
         default_limit=5,
-        default_excluded_labels=DEFAULT_EXCLUDED_LABELS,
+        default_excluded_labels=(),
     ),
     "us-market": PresetSpec(
         key="us-market",
@@ -141,7 +141,7 @@ PRESET_SPECS = {
         supported_sources=("google", "baidu"),
         default_sources=("google", "baidu"),
         default_limit=5,
-        default_excluded_labels=DEFAULT_EXCLUDED_LABELS,
+        default_excluded_labels=(),
     ),
     "github": PresetSpec(
         key="github",
@@ -150,7 +150,7 @@ PRESET_SPECS = {
         supported_sources=("github",),
         default_sources=("github",),
         default_limit=10,
-        default_excluded_labels=DEFAULT_EXCLUDED_LABELS,
+        default_excluded_labels=(),
     ),
 }
 
@@ -291,24 +291,11 @@ def _collect_provider_groups(
     item_groups: list[list[NewsItem]] = []
     warnings: list[str] = []
 
-    if len(resolved_sources) <= 1:
-        for provider in resolved_sources:
-            try:
-                item_groups.append(_fetch_provider_items(provider, key=key, limit=fetch_limit, timeout=timeout))
-            except FetchError as exc:
-                warnings.append(f"{provider} 获取失败: {exc}")
-        return item_groups, warnings
-
-    with ThreadPoolExecutor(max_workers=min(4, len(resolved_sources))) as executor:
-        futures = {
-            provider: executor.submit(_fetch_provider_items, provider, key, fetch_limit, timeout)
-            for provider in resolved_sources
-        }
-        for provider in resolved_sources:
-            try:
-                item_groups.append(futures[provider].result())
-            except FetchError as exc:
-                warnings.append(f"{provider} 获取失败: {exc}")
+    for provider in resolved_sources:
+        try:
+            item_groups.append(_fetch_provider_items(provider, key=key, limit=fetch_limit, timeout=timeout))
+        except FetchError as exc:
+            warnings.append(f"{provider} 获取失败: {exc}")
 
     return item_groups, warnings
 
@@ -320,13 +307,16 @@ def _prepare_section(
     timeout: float,
     semantic_enabled: bool,
     semantic_filter: bool,
+    excluded_labels: tuple[str, ...] | None,
 ) -> PreparedSection:
     if key not in PRESET_SPECS:
         raise ValueError(f"Unknown preset: {key}")
 
     spec = PRESET_SPECS[key]
     final_limit = spec.default_limit if limit is None else limit
-    fetch_limit = _candidate_limit(final_limit, semantic_filter and semantic_enabled)
+    effective_excluded_labels = excluded_labels if excluded_labels is not None else spec.default_excluded_labels
+    filter_active = semantic_enabled and semantic_filter and bool(effective_excluded_labels)
+    fetch_limit = _candidate_limit(final_limit, filter_active)
     resolved_sources = list(resolve_sources(spec, source))
     section = SectionResult(
         key=spec.key,
@@ -352,12 +342,16 @@ def _prepare_section(
     return PreparedSection(spec=spec, final_limit=final_limit, section=section)
 
 
-def _annotate_prepared_sections(prepared_sections: list[PreparedSection], semantic_model_dir: str | None) -> None:
+def _annotate_prepared_sections(
+    prepared_sections: list[PreparedSection],
+    semantic_model_dir: str | None,
+    filter_mode: str,
+) -> None:
     all_items = [item for prepared in prepared_sections for item in prepared.section.items]
     if not all_items:
         return
 
-    labeler = get_semantic_labeler(semantic_model_dir)
+    labeler = get_semantic_labeler(semantic_model_dir, backend=filter_mode)
     labeler.annotate_items(all_items)
 
 
@@ -367,6 +361,7 @@ def _finalize_section(
     semantic_enabled: bool,
     semantic_filter: bool,
     excluded_labels: tuple[str, ...] | None,
+    filter_mode: str,
 ) -> SectionResult:
     default_excluded_labels = prepared.spec.default_excluded_labels
     final_limit = prepared.final_limit
@@ -379,10 +374,10 @@ def _finalize_section(
         return section
 
     section.semantic_enabled = True
-    section.semantic_model = MODEL_REPO_ID
+    section.semantic_model = MODEL_REPO_ID if filter_mode == "model" else TFIDF_BACKEND_ID
 
-    if semantic_filter:
-        blocked = excluded_labels if excluded_labels else default_excluded_labels
+    blocked = excluded_labels if excluded_labels is not None else default_excluded_labels
+    if semantic_filter and blocked:
         section.filter_enabled = True
         section.excluded_labels = list(blocked)
 
@@ -416,39 +411,30 @@ def collect_presets(
     semantic_filter: bool = True,
     excluded_labels: tuple[str, ...] | None = None,
     semantic_model_dir: str | None = None,
+    filter_mode: str = "tfidf",
 ) -> list[SectionResult]:
     if not keys:
         return []
 
-    if len(keys) == 1:
-        prepared_sections = [
-            _prepare_section(
-                keys[0],
-                source=source,
-                limit=limit,
-                timeout=timeout,
-                semantic_enabled=semantic_enabled,
-                semantic_filter=semantic_filter,
-            )
-        ]
-    else:
-        with ThreadPoolExecutor(max_workers=min(8, len(keys))) as executor:
-            futures = [
-                executor.submit(
-                    _prepare_section,
-                    key,
-                    source,
-                    limit,
-                    timeout,
-                    semantic_enabled,
-                    semantic_filter,
-                )
-                for key in keys
-            ]
-            prepared_sections = [future.result() for future in futures]
+    prepared_sections = [
+        _prepare_section(
+            key,
+            source=source,
+            limit=limit,
+            timeout=timeout,
+            semantic_enabled=semantic_enabled,
+            semantic_filter=semantic_filter,
+            excluded_labels=excluded_labels,
+        )
+        for key in keys
+    ]
 
     if semantic_enabled:
-        _annotate_prepared_sections(prepared_sections, semantic_model_dir=semantic_model_dir)
+        _annotate_prepared_sections(
+            prepared_sections,
+            semantic_model_dir=semantic_model_dir,
+            filter_mode=filter_mode,
+        )
 
     return [
         _finalize_section(
@@ -457,6 +443,7 @@ def collect_presets(
             semantic_enabled=semantic_enabled,
             semantic_filter=semantic_filter,
             excluded_labels=excluded_labels,
+            filter_mode=filter_mode,
         )
         for prepared in prepared_sections
     ]
@@ -471,6 +458,7 @@ def collect_preset(
     semantic_filter: bool = True,
     excluded_labels: tuple[str, ...] | None = None,
     semantic_model_dir: str | None = None,
+    filter_mode: str = "tfidf",
 ) -> SectionResult:
     return collect_presets(
         [key],
@@ -481,6 +469,7 @@ def collect_preset(
         semantic_filter=semantic_filter,
         excluded_labels=excluded_labels,
         semantic_model_dir=semantic_model_dir,
+        filter_mode=filter_mode,
     )[0]
 
 
@@ -492,6 +481,7 @@ def collect_summary(
     semantic_filter: bool = True,
     excluded_labels: tuple[str, ...] | None = None,
     semantic_model_dir: str | None = None,
+    filter_mode: str = "tfidf",
 ) -> list[SectionResult]:
     return collect_presets(
         list(DEFAULT_SUMMARY_PRESETS),
@@ -502,6 +492,7 @@ def collect_summary(
         semantic_filter=semantic_filter,
         excluded_labels=excluded_labels,
         semantic_model_dir=semantic_model_dir,
+        filter_mode=filter_mode,
     )
 
 
@@ -514,11 +505,12 @@ def collect_search(
     semantic_filter: bool = True,
     excluded_labels: tuple[str, ...] | None = None,
     semantic_model_dir: str | None = None,
+    filter_mode: str = "tfidf",
 ) -> SectionResult:
     if google_locale == "auto":
         google_locale = "cn" if contains_cjk(query) else "us"
 
-    fetch_limit = _candidate_limit(limit, semantic_filter and semantic_enabled)
+    fetch_limit = _candidate_limit(limit, semantic_filter and semantic_enabled and bool(excluded_labels))
     section = SectionResult(
         key="search",
         label=f'自定义查询: "{query}"',
@@ -549,14 +541,18 @@ def collect_search(
             supported_sources=("google",),
             default_sources=("google",),
             default_limit=limit,
-            default_excluded_labels=DEFAULT_EXCLUDED_LABELS,
+            default_excluded_labels=(),
         ),
         final_limit=limit,
         section=section,
     )
 
     if semantic_enabled:
-        _annotate_prepared_sections([prepared], semantic_model_dir=semantic_model_dir)
+        _annotate_prepared_sections(
+            [prepared],
+            semantic_model_dir=semantic_model_dir,
+            filter_mode=filter_mode,
+        )
 
     return _finalize_section(
         prepared,
@@ -564,4 +560,5 @@ def collect_search(
         semantic_enabled=semantic_enabled,
         semantic_filter=semantic_filter,
         excluded_labels=excluded_labels,
+        filter_mode=filter_mode,
     )

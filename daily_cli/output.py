@@ -22,7 +22,7 @@ def render_text(sections: list[SectionResult]) -> str:
         lines.append(f"{section.label} [{section.key}]")
         lines.append(f"来源: {', '.join(section.resolved_sources)}")
         if section.semantic_enabled:
-            semantic_parts = [f"语义标签: 开启", f"模型 {section.semantic_model}"]
+            semantic_parts = [f"语义标签: 开启", f"后端 {section.semantic_model}"]
             if section.filter_enabled:
                 labels = ", ".join(section.excluded_labels) if section.excluded_labels else "无"
                 semantic_parts.append(f"过滤标签 {labels}")
@@ -58,9 +58,9 @@ def render_text(sections: list[SectionResult]) -> str:
                 meta_parts.append(item.published_at)
             if item.content_label_name:
                 if item.content_label_score:
-                    meta_parts.append(f"语义 {item.content_label_name} {item.content_label_score:.2f}")
+                    meta_parts.append(f"分类: {item.content_label_name} {item.content_label_score:.2f}")
                 else:
-                    meta_parts.append(f"语义 {item.content_label_name}")
+                    meta_parts.append(f"分类: {item.content_label_name}")
             if item.tags:
                 meta_parts.append("标签 " + "/".join(item.tags))
 

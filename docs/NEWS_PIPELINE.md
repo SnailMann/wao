@@ -4,11 +4,12 @@
 
 当前版本还包含一个默认开启的语义过滤层：
 
-- 使用 `intfloat/multilingual-e5-small`
+- 默认使用 `tfidf + prototype classifier + 少量词表`
+- 也支持 `intfloat/multilingual-e5-small`
 - 默认对每条结果做语义打标
-- 默认过滤 `soft` 标签
-- 可通过 CLI 参数关闭语义打标或仅关闭过滤
-- `summary` 和多 preset `fetch` 会先并行抓取，再把所有候选合并成一批做统一推理
+- 默认仅 `us-hot` / `china-hot` 过滤 `soft`
+- 可通过 CLI 参数关闭语义打标、关闭过滤或切换后端
+- `summary` 和多 preset `fetch` 会先串行抓取，再把所有候选合并成一批做统一推理
 
 ## 1. 设计目标
 
@@ -375,11 +376,22 @@ Google 侧：
 
 这是当前版本新增的一层本地处理逻辑，位于“抓取完成、输出之前”。
 
-### 6.1 使用的模型
+### 6.1 使用的后端
 
-- 模型：`intfloat/multilingual-e5-small`
-- 用途：把 `title + summary + publisher` 编码成向量，再与预定义标签描述做相似度比较
-- 特点：不做训练，直接拿来即用
+- `model`
+  - 模型：`intfloat/multilingual-e5-small`
+  - 用途：把 `title + summary + publisher` 编码成向量，再与预定义标签描述做相似度比较
+- `tfidf`
+  - 不依赖大模型
+  - 使用固定标签原型文本、少量词表和 TF-IDF 相似度完成分类
+
+因此：
+
+- 默认推荐 `tfidf`
+- 想要更强语义能力时用 `model`
+- 想要更轻、更快、零模型下载时用 `tfidf`
+
+两种后端都使用同一套标签定义，区别只在于打标方式。
 
 ### 6.2 当前标签集合
 
@@ -396,9 +408,11 @@ Google 侧：
 ### 6.3 默认行为
 
 - `summary` / `fetch` / `search` 默认都会做语义打标
-- 所有预设默认过滤 `soft`
+- 默认仅 `us-hot` / `china-hot` 过滤 `soft`
+- 其他预设默认只展示标签，不做拦截
 - `--no-filter` 会保留标签但不删除结果
 - `--no-semantic` 会完全跳过语义模型
+- `--filter-mode tfidf` 会切到轻量 TF-IDF 过滤器
 
 ### 6.4 为什么这样设计
 
@@ -481,7 +495,7 @@ Google 侧：
 | 字段 | 含义 |
 | --- | --- |
 | `semantic_enabled` | 是否启用语义打标 |
-| `semantic_model` | 当前使用的语义模型 |
+| `semantic_model` | 当前使用的语义后端或模型标识 |
 | `filter_enabled` | 是否启用语义过滤 |
 | `excluded_labels` | 当前排除的标签 |
 | `filtered_count` | 本次被过滤掉的条数 |

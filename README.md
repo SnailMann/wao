@@ -14,9 +14,10 @@
 - 改成可安装的 Python 包，支持 `pip install .`
 - Google 侧使用当前可用的 Trends RSS / Google News RSS
 - Baidu 侧使用百度热榜结构化数据与关键词过滤
-- 默认使用 `intfloat/multilingual-e5-small` 做语义打标
-- 默认过滤 `soft` 标签，尽量屏蔽低信息量内容
-- `summary` / 多 preset `fetch` 采用并行抓取 + 全局批量推理，减少重复模型开销
+- 默认使用 `tfidf` 轻量后端做语义打标
+- 默认仅在 `us-hot` 和 `china-hot` 里过滤 `soft` 标签
+- 支持 `model` 和 `tfidf` 两种标签/过滤后端
+- `summary` / 多 preset `fetch` 采用串行抓取 + 全局批量推理，避免并发调用公开接口
 - 提供多命令、多预设、多输出格式
 
 ## 安装
@@ -27,6 +28,8 @@
 python3 -m pip install .
 daily-cli model download
 ```
+
+如果你只打算使用 `--filter-mode tfidf`，可以不下载模型。
 
 安装后可直接使用：
 
@@ -93,6 +96,7 @@ daily-cli presets
 --no-filter
 --exclude-label soft
 --semantic-model-dir /path/to/model
+--filter-mode model|tfidf
 ```
 
 说明：
@@ -111,9 +115,10 @@ daily-cli presets
 默认语义行为：
 
 - `summary` / `fetch` / `search` 默认都会做语义打标
-- 默认过滤 `soft` 标签
+- 默认仅 `us-hot` / `china-hot` 会过滤 `soft`
 - 如果只想看标签、不做过滤，使用 `--no-filter`
 - 如果想完全关闭语义能力，使用 `--no-semantic`
+- 如果想切到轻量过滤器，使用 `--filter-mode tfidf`
 
 `search` 命令还支持：
 
@@ -127,6 +132,7 @@ daily-cli presets
 daily-cli model download
 daily-cli summary --limit 5
 daily-cli summary --no-filter
+daily-cli summary --filter-mode tfidf
 daily-cli fetch ai finance --source all
 daily-cli fetch china-hot --exclude-label soft --exclude-label public
 daily-cli fetch github --limit 10
@@ -141,8 +147,9 @@ daily-cli search "人工智能"
 - `china-hot` 默认使用百度热榜结构化数据。
 - `ai` / `finance` 默认聚合 Google News RSS 与百度热榜过滤结果。
 - `github` 使用 GitHub Trending 页面抓取热门项目、语言、Stars、Forks 和今日新增 Stars。
-- 语义标签默认使用 `intfloat/multilingual-e5-small`，当前标签为 `macro`、`industry`、`tech`、`public`、`soft`。
-- 所有预设默认过滤 `soft`，并在输出里直接展示语义标签和分数。
+- 标签分类保持为 `macro`、`industry`、`tech`、`public`、`soft`。
+- 默认后端为 `tfidf`，也支持 `model` 后端。
+- 默认仅 `us-hot` / `china-hot` 过滤 `soft`，其他预设默认只打标签不做拦截。
 - Baidu 普通网页搜索较容易触发验证码，因此没有把它作为核心依赖接口。
 
 更详细的类别、来源、排序和降级逻辑说明见：

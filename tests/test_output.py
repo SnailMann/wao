@@ -36,7 +36,7 @@ class OutputRenderingTests(unittest.TestCase):
 
         self.assertIn("语义标签: 开启", rendered)
         self.assertIn("过滤标签 soft", rendered)
-        self.assertIn("语义 宏观与政策 0.84", rendered)
+        self.assertIn("分类: 宏观与政策 0.84", rendered)
 
 
 if __name__ == "__main__":
