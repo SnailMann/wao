@@ -39,6 +39,14 @@ def render_text(sections: list[SectionResult]) -> str:
                 meta_parts.append(f"热度 {item.approx_traffic}")
             if item.hot_score:
                 meta_parts.append(f"热搜值 {item.hot_score}")
+            if item.language:
+                meta_parts.append(item.language)
+            if item.repo_stars:
+                meta_parts.append(f"Stars {item.repo_stars}")
+            if item.repo_forks:
+                meta_parts.append(f"Forks {item.repo_forks}")
+            if item.stars_today:
+                meta_parts.append(f"Today +{item.stars_today}")
             if item.published_at:
                 meta_parts.append(item.published_at)
             if item.tags:

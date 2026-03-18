@@ -5,6 +5,7 @@ import unittest
 from daily_cli.sources import (
     filter_items_by_keywords,
     parse_baidu_realtime_html,
+    parse_github_trending_html,
     parse_google_news_rss,
     parse_google_trends_rss,
 )
@@ -49,6 +50,32 @@ BAIDU_REALTIME_SAMPLE = """
 </html>
 """
 
+GITHUB_TRENDING_SAMPLE = """
+<html>
+  <body>
+    <article class="Box-row">
+      <h2 class="h3 lh-condensed">
+        <a href="/jarrodwatts/claude-hud">
+          <span class="text-normal">jarrodwatts /</span>
+          claude-hud
+        </a>
+      </h2>
+      <p class="col-9 color-fg-muted my-1 tmp-pr-4">
+        A Claude Code plugin that shows what's happening.
+      </p>
+      <div class="f6 color-fg-muted mt-2">
+        <span class="tmp-mr-3 d-inline-block ml-0">
+          <span itemprop="programmingLanguage">JavaScript</span>
+        </span>
+        <a href="/jarrodwatts/claude-hud/stargazers">6,220</a>
+        <a href="/jarrodwatts/claude-hud/forks">272</a>
+        <span class="d-inline-block float-sm-right">1,040 stars today</span>
+      </div>
+    </article>
+  </body>
+</html>
+"""
+
 class SourceParserTests(unittest.TestCase):
     def test_parse_google_trends_rss(self) -> None:
         items = parse_google_trends_rss(GOOGLE_TRENDS_SAMPLE, limit=3, category="us-hot")
@@ -83,6 +110,16 @@ class SourceParserTests(unittest.TestCase):
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0].title, "人工智能加速融入千行百业")
         self.assertEqual(items[0].category, "ai")
+
+    def test_parse_github_trending_html(self) -> None:
+        items = parse_github_trending_html(GITHUB_TRENDING_SAMPLE, limit=5, category="github")
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].title, "jarrodwatts/claude-hud")
+        self.assertEqual(items[0].language, "JavaScript")
+        self.assertEqual(items[0].repo_stars, "6,220")
+        self.assertEqual(items[0].repo_forks, "272")
+        self.assertEqual(items[0].stars_today, "1,040")
+        self.assertEqual(items[0].link, "https://github.com/jarrodwatts/claude-hud")
 
 
 if __name__ == "__main__":

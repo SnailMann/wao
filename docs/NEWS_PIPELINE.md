@@ -10,6 +10,7 @@
 - 中国热门事件
 - AI 发展趋势
 - 金融热门事件
+- GitHub Trending
 - 美股焦点
 - 自定义关键词结果
 
@@ -24,12 +25,13 @@
 
 ### 2.1 默认摘要
 
-`summary` 命令会固定输出 4 个分组：
+`summary` 命令会固定输出 5 个分组：
 
 - `us-hot`
 - `china-hot`
 - `ai`
 - `finance`
+- `github`
 
 ### 2.2 全部预设
 
@@ -39,6 +41,7 @@
 | `china-hot` | 中国热门事件 | `baidu` | 依赖百度热榜实时榜 |
 | `ai` | AI 发展趋势 | `google + baidu` | Google News AI 查询 + 百度热榜关键词过滤 |
 | `finance` | 金融热门事件 | `google + baidu` | Google News 金融查询 + 百度热榜关键词过滤 |
+| `github` | GitHub Trending | `github` | GitHub Trending 热门仓库列表 |
 | `us-market` | 美股焦点 | `google + baidu` | Google News 美股查询 + 百度热榜关键词过滤 |
 | `search` | 自定义查询 | `google` | 按用户输入关键词通过 Google News 查询 |
 
@@ -136,6 +139,35 @@ https://top.baidu.com/board?tab=realtime
 - 更容易触发验证码
 - 返回结构不稳定
 - 做成本地 CLI 时可维护性较差
+
+### 3.4 GitHub 来源
+
+#### A. GitHub Trending
+
+用途：
+
+- `github`
+
+当前使用的页面：
+
+```text
+https://github.com/trending
+```
+
+实现方式：
+
+- 直接抓取 GitHub Trending HTML
+- 从每个仓库卡片中解析仓库名、描述、语言、总 Stars、Forks、今日新增 Stars
+
+当前输出的项目信息包括：
+
+- 仓库名，例如 `owner/repo`
+- 仓库链接
+- 仓库描述
+- 编程语言
+- 总 Stars
+- Forks
+- 今日新增 Stars
 
 ## 4. 类别是怎么判断出来的
 
@@ -267,7 +299,16 @@ s&p
 股指
 ```
 
-## 4.6 `search`
+## 4.6 `github`
+
+`github` 不做本地主题分类，而是直接把 GitHub Trending 页面中的热门仓库卡片作为结果。
+
+判断方式：
+
+- 不做关键词或语义分类
+- 直接以 GitHub Trending 页面顺序为准
+
+## 4.7 `search`
 
 `search` 是动态类别，不预设固定主题，且当前只通过 Google 查询。
 
@@ -290,6 +331,7 @@ Google 侧：
 
 - Google Trends：按 RSS 原顺序
 - Google News：按 RSS 原顺序
+- GitHub Trending：按页面原始顺序
 - 百度热榜：按热榜原顺序
 
 ## 5.2 百度专题混合时
@@ -367,8 +409,8 @@ Google 侧：
 | --- | --- |
 | `title` | 标题 |
 | `category` | 所属类别 |
-| `provider` | 来源大类，`google` 或 `baidu` |
-| `feed` | 具体来源名，如 `Google News`、`Baidu Hotboard` |
+| `provider` | 来源大类，`google`、`baidu` 或 `github` |
+| `feed` | 具体来源名，如 `Google News`、`Baidu Hotboard`、`GitHub Trending` |
 | `link` | 跳转链接 |
 | `summary` | 摘要或补充标题 |
 | `publisher` | 发布方或来源说明 |
@@ -377,6 +419,10 @@ Google 侧：
 | `hot_score` | 百度热榜热度值 |
 | `approx_traffic` | Google Trends 的近似热度 |
 | `search_query` | 保留字段，当前默认不使用 |
+| `language` | GitHub Trending 仓库语言 |
+| `repo_stars` | GitHub 仓库总 Stars |
+| `repo_forks` | GitHub 仓库 Forks |
+| `stars_today` | GitHub Trending 今日新增 Stars |
 | `tags` | 附加标签，如 `新`、`热`、`置顶` |
 
 ## 9. `--source` 参数的真实语义
@@ -387,12 +433,19 @@ Google 侧：
 | `all` | 用该预设支持的全部来源 |
 | `google` | 只用 Google |
 | `baidu` | 只用 Baidu |
+| `github` | 只用 GitHub Trending |
 
 注意：
 
-- 不是所有预设都支持 Google 和 Baidu 双来源
+- 不是所有预设都支持 Google、Baidu 和 GitHub 双来源
 - 例如 `us-hot` 只支持 `google`
 - `china-hot` 只支持 `baidu`
+- `github` 只支持 `github`
+
+默认条数：
+
+- 大多数预设默认返回 5 条
+- `github` 默认返回 10 条
 
 ## 10. 为什么没有用更复杂的语义分类
 
@@ -428,6 +481,7 @@ Google 侧：
 ### 局限
 
 - `finance` / `ai` / `us-market` 的 Baidu 侧判断是启发式，不是语义理解
+- `github` 依赖 GitHub Trending 页面结构，若页面结构变化需要更新解析逻辑
 - 标题去重不是语义去重
 - Google News 的标题切分使用的是最后一个 `" - "`，极少数情况下可能误分发布方
 - 上游接口结构若变化，需要更新解析逻辑

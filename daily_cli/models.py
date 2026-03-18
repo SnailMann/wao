@@ -18,6 +18,10 @@ class NewsItem:
     hot_score: str = ""
     approx_traffic: str = ""
     search_query: str = ""
+    language: str = ""
+    repo_stars: str = ""
+    repo_forks: str = ""
+    stars_today: str = ""
     tags: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:

@@ -25,15 +25,15 @@ def positive_float(value: str) -> float:
 def add_common_fetch_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--source",
-        choices=("auto", "google", "baidu", "all"),
+        choices=("auto", "google", "baidu", "github", "all"),
         default="auto",
         help="选择数据来源，默认按预设自动挑选。",
     )
     parser.add_argument(
         "--limit",
         type=positive_int,
-        default=5,
-        help="每个分组最多返回多少条结果。",
+        default=None,
+        help="每个分组最多返回多少条结果；默认使用各预设自己的默认值。",
     )
     parser.add_argument(
         "--timeout",
@@ -133,6 +133,7 @@ def main(argv: list[str] | None = None) -> int:
                             "description": spec.description,
                             "supported_sources": list(spec.supported_sources),
                             "default_sources": list(spec.default_sources),
+                            "default_limit": spec.default_limit,
                         }
                         for spec in list_presets()
                     ]
@@ -145,7 +146,7 @@ def main(argv: list[str] | None = None) -> int:
                 default = ", ".join(spec.default_sources)
                 print(f"{spec.key}: {spec.label}")
                 print(f"  {spec.description}")
-                print(f"  supported={supported} default={default}")
+                print(f"  supported={supported} default={default} limit={spec.default_limit}")
             return 0
 
         if args.command == "summary":

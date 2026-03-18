@@ -8,6 +8,7 @@ from .sources import (
     contains_cjk,
     dedupe_items,
     fetch_baidu_realtime,
+    fetch_github_trending,
     fetch_google_news_search,
     fetch_google_trends_us,
     filter_items_by_keywords,
@@ -15,7 +16,7 @@ from .sources import (
     normalize_title,
 )
 
-DEFAULT_SUMMARY_PRESETS = ("us-hot", "china-hot", "ai", "finance")
+DEFAULT_SUMMARY_PRESETS = ("us-hot", "china-hot", "ai", "finance", "github")
 
 AI_GOOGLE_QUERY = 'AI OR "artificial intelligence" OR OpenAI OR Anthropic OR Gemini OR Nvidia'
 FINANCE_GOOGLE_QUERY = (
@@ -79,6 +80,7 @@ class PresetSpec:
     description: str
     supported_sources: tuple[str, ...]
     default_sources: tuple[str, ...]
+    default_limit: int
 
 
 PRESET_SPECS = {
@@ -88,6 +90,7 @@ PRESET_SPECS = {
         description="默认使用 Google Trends RSS，适合追踪美国当天热门搜索与事件。",
         supported_sources=("google",),
         default_sources=("google",),
+        default_limit=5,
     ),
     "china-hot": PresetSpec(
         key="china-hot",
@@ -95,6 +98,7 @@ PRESET_SPECS = {
         description="默认使用百度热榜结构化数据。",
         supported_sources=("baidu",),
         default_sources=("baidu",),
+        default_limit=5,
     ),
     "ai": PresetSpec(
         key="ai",
@@ -102,6 +106,7 @@ PRESET_SPECS = {
         description="聚合 Google News RSS 与百度热榜中的 AI 相关条目。",
         supported_sources=("google", "baidu"),
         default_sources=("google", "baidu"),
+        default_limit=5,
     ),
     "finance": PresetSpec(
         key="finance",
@@ -109,6 +114,7 @@ PRESET_SPECS = {
         description="聚合 Google News RSS 与百度热榜中的金融类条目。",
         supported_sources=("google", "baidu"),
         default_sources=("google", "baidu"),
+        default_limit=5,
     ),
     "us-market": PresetSpec(
         key="us-market",
@@ -116,6 +122,15 @@ PRESET_SPECS = {
         description="额外预设，聚合 Google News 与百度热榜中的美股相关热点。",
         supported_sources=("google", "baidu"),
         default_sources=("google", "baidu"),
+        default_limit=5,
+    ),
+    "github": PresetSpec(
+        key="github",
+        label="GitHub Trending",
+        description="获取 GitHub Trending 项目的热门仓库信息。",
+        supported_sources=("github",),
+        default_sources=("github",),
+        default_limit=10,
     ),
 }
 
@@ -163,6 +178,12 @@ def _google_items_for_preset(key: str, limit: int, timeout: float) -> list[NewsI
             locale="us",
         )
     raise ValueError(f"Unsupported Google preset: {key}")
+
+
+def _github_items_for_preset(key: str, limit: int, timeout: float) -> list[NewsItem]:
+    if key == "github":
+        return fetch_github_trending(limit=limit, timeout=timeout, category=key)
+    raise ValueError(f"Unsupported GitHub preset: {key}")
 
 
 def _baidu_topic_mix(
@@ -225,11 +246,12 @@ def _merge_item_groups(item_groups: list[list[NewsItem]], limit: int) -> list[Ne
     return merged
 
 
-def collect_preset(key: str, source: str, limit: int, timeout: float) -> SectionResult:
+def collect_preset(key: str, source: str, limit: int | None, timeout: float) -> SectionResult:
     if key not in PRESET_SPECS:
         raise ValueError(f"Unknown preset: {key}")
 
     spec = PRESET_SPECS[key]
+    effective_limit = spec.default_limit if limit is None else limit
     resolved_sources = list(resolve_sources(spec, source))
     section = SectionResult(
         key=spec.key,
@@ -243,22 +265,30 @@ def collect_preset(key: str, source: str, limit: int, timeout: float) -> Section
     for provider in resolved_sources:
         try:
             if provider == "google":
-                item_groups.append(_google_items_for_preset(spec.key, limit=limit, timeout=timeout))
+                item_groups.append(_google_items_for_preset(spec.key, limit=effective_limit, timeout=timeout))
             elif provider == "baidu":
-                item_groups.append(_baidu_items_for_preset(spec.key, limit=limit, timeout=timeout))
+                item_groups.append(_baidu_items_for_preset(spec.key, limit=effective_limit, timeout=timeout))
+            elif provider == "github":
+                item_groups.append(_github_items_for_preset(spec.key, limit=effective_limit, timeout=timeout))
         except FetchError as exc:
             section.warnings.append(f"{provider} 获取失败: {exc}")
 
     if len(item_groups) <= 1:
-        section.items = dedupe_items(item_groups[0] if item_groups else [], limit=limit)
+        section.items = dedupe_items(item_groups[0] if item_groups else [], limit=effective_limit)
     else:
-        section.items = _merge_item_groups(item_groups, limit=limit)
+        section.items = _merge_item_groups(item_groups, limit=effective_limit)
+
+    if spec.key == "github" and section.items and len(section.items) < effective_limit:
+        section.warnings.append(
+            f"GitHub Trending 当前只解析到 {len(section.items)} 条结果，少于目标 {effective_limit} 条。"
+        )
+
     if not section.items and not section.warnings:
         section.warnings.append("没有获取到结果。")
     return section
 
 
-def collect_summary(source: str, limit: int, timeout: float) -> list[SectionResult]:
+def collect_summary(source: str, limit: int | None, timeout: float) -> list[SectionResult]:
     return [collect_preset(key, source=source, limit=limit, timeout=timeout) for key in DEFAULT_SUMMARY_PRESETS]
 
 

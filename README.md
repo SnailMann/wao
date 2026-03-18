@@ -6,6 +6,7 @@
 - 中国热门事件
 - AI 发展趋势
 - 金融热门事件
+- GitHub Trending
 - 额外附带一个 `us-market` 预设，方便快速查看美股焦点
 
 它参考了你给的 `daily-news` 思路，但做了几处增强：
@@ -39,7 +40,7 @@ pipx install .
 
 ## 命令
 
-### 1. 一次看默认四类信息
+### 1. 一次看默认五类信息
 
 ```bash
 daily-cli summary
@@ -50,6 +51,7 @@ daily-cli summary
 ```bash
 daily-cli fetch us-hot
 daily-cli fetch china-hot ai finance
+daily-cli fetch github --limit 10
 daily-cli fetch us-market --source all --limit 8
 ```
 
@@ -59,6 +61,7 @@ daily-cli fetch us-market --source all --limit 8
 - `china-hot`: 中国热门事件
 - `ai`: AI 发展趋势
 - `finance`: 金融热门事件
+- `github`: GitHub Trending
 - `us-market`: 美股焦点
 
 ### 3. 自定义关键词查询
@@ -78,8 +81,8 @@ daily-cli presets
 ## 常用参数
 
 ```bash
---source auto|google|baidu|all
---limit 5
+--source auto|google|baidu|github|all
+--limit N
 --timeout 10
 --format text|json
 ```
@@ -90,6 +93,12 @@ daily-cli presets
 - `all`: 聚合该命令支持的全部来源
 - `google`: 仅 Google
 - `baidu`: 仅 Baidu
+- `github`: 仅 GitHub Trending
+
+默认条数：
+
+- 大多数预设默认返回 5 条
+- `github` 默认返回 10 条
 
 `search` 命令还支持：
 
@@ -102,6 +111,7 @@ daily-cli presets
 ```bash
 daily-cli summary --limit 5
 daily-cli fetch ai finance --source all
+daily-cli fetch github --limit 10
 daily-cli fetch china-hot --format json
 daily-cli search "Federal Reserve" --google-locale us
 daily-cli search "人工智能"
@@ -112,6 +122,7 @@ daily-cli search "人工智能"
 - `us-hot` 默认使用 Google Trends RSS，因为它更适合美国热门事件。
 - `china-hot` 默认使用百度热榜结构化数据。
 - `ai` / `finance` 默认聚合 Google News RSS 与百度热榜过滤结果。
+- `github` 使用 GitHub Trending 页面抓取热门项目、语言、Stars、Forks 和今日新增 Stars。
 - Baidu 普通网页搜索较容易触发验证码，因此没有把它作为核心依赖接口。
 
 更详细的类别、来源、排序和降级逻辑说明见：
