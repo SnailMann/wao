@@ -94,6 +94,8 @@ class PresetSpec:
 class PreparedSection:
     spec: PresetSpec
     final_limit: int
+    blocked_labels: tuple[str, ...]
+    filter_active: bool
     section: SectionResult
 
 
@@ -339,7 +341,13 @@ def _prepare_section(
             f"GitHub Trending 当前只解析到 {len(section.items)} 条结果，少于目标 {final_limit} 条。"
         )
 
-    return PreparedSection(spec=spec, final_limit=final_limit, section=section)
+    return PreparedSection(
+        spec=spec,
+        final_limit=final_limit,
+        blocked_labels=effective_excluded_labels,
+        filter_active=filter_active,
+        section=section,
+    )
 
 
 def _annotate_prepared_sections(
@@ -347,7 +355,12 @@ def _annotate_prepared_sections(
     semantic_model_dir: str | None,
     filter_mode: str,
 ) -> None:
-    all_items = [item for prepared in prepared_sections for item in prepared.section.items]
+    all_items = [
+        item
+        for prepared in prepared_sections
+        if prepared.filter_active
+        for item in prepared.section.items
+    ]
     if not all_items:
         return
 
@@ -358,15 +371,11 @@ def _annotate_prepared_sections(
 def _finalize_section(
     prepared: PreparedSection,
     section: SectionResult,
-    semantic_enabled: bool,
-    semantic_filter: bool,
-    excluded_labels: tuple[str, ...] | None,
     filter_mode: str,
 ) -> SectionResult:
-    default_excluded_labels = prepared.spec.default_excluded_labels
     final_limit = prepared.final_limit
 
-    if not semantic_enabled:
+    if not prepared.filter_active:
         if len(section.items) > final_limit:
             section.items = section.items[:final_limit]
         if not section.items and not section.warnings:
@@ -376,24 +385,22 @@ def _finalize_section(
     section.semantic_enabled = True
     section.semantic_model = MODEL_REPO_ID if filter_mode == "model" else TFIDF_BACKEND_ID
 
-    blocked = excluded_labels if excluded_labels is not None else default_excluded_labels
-    if semantic_filter and blocked:
-        section.filter_enabled = True
-        section.excluded_labels = list(blocked)
+    section.filter_enabled = True
+    section.excluded_labels = list(prepared.blocked_labels)
 
-        kept: list[NewsItem] = []
-        filtered_count = 0
-        for item in section.items:
-            if item.content_label and item.content_label in blocked:
-                filtered_count += 1
-                continue
-            kept.append(item)
+    kept: list[NewsItem] = []
+    filtered_count = 0
+    for item in section.items:
+        if item.content_label and item.content_label in prepared.blocked_labels:
+            filtered_count += 1
+            continue
+        kept.append(item)
 
-        section.items = kept
-        section.filtered_count = filtered_count
+    section.items = kept
+    section.filtered_count = filtered_count
 
-        if filtered_count and not section.items and not section.warnings:
-            section.warnings.append("语义过滤后没有保留结果。")
+    if filtered_count and not section.items and not section.warnings:
+        section.warnings.append("语义过滤后没有保留结果。")
 
     if len(section.items) > final_limit:
         section.items = section.items[:final_limit]
@@ -440,9 +447,6 @@ def collect_presets(
         _finalize_section(
             prepared,
             prepared.section,
-            semantic_enabled=semantic_enabled,
-            semantic_filter=semantic_filter,
-            excluded_labels=excluded_labels,
             filter_mode=filter_mode,
         )
         for prepared in prepared_sections
@@ -544,6 +548,8 @@ def collect_search(
             default_excluded_labels=(),
         ),
         final_limit=limit,
+        blocked_labels=excluded_labels or (),
+        filter_active=semantic_enabled and semantic_filter and bool(excluded_labels),
         section=section,
     )
 
@@ -557,8 +563,5 @@ def collect_search(
     return _finalize_section(
         prepared,
         section,
-        semantic_enabled=semantic_enabled,
-        semantic_filter=semantic_filter,
-        excluded_labels=excluded_labels,
         filter_mode=filter_mode,
     )

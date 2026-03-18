@@ -14,10 +14,10 @@
 - 改成可安装的 Python 包，支持 `pip install .`
 - Google 侧使用当前可用的 Trends RSS / Google News RSS
 - Baidu 侧使用百度热榜结构化数据与关键词过滤
-- 默认使用 `tfidf` 轻量后端做语义打标
+- 默认使用 `tfidf` 混合后端做过滤分类
 - 默认仅在 `us-hot` 和 `china-hot` 里过滤 `soft` 标签
 - 支持 `model` 和 `tfidf` 两种标签/过滤后端
-- `summary` / 多 preset `fetch` 采用串行抓取 + 全局批量推理，避免并发调用公开接口
+- 只有真正启用过滤的 preset 才会触发额外抓取与分类
 - 提供多命令、多预设、多输出格式
 
 ## 安装
@@ -114,9 +114,9 @@ daily-cli presets
 
 默认语义行为：
 
-- `summary` / `fetch` / `search` 默认都会做语义打标
-- 默认仅 `us-hot` / `china-hot` 会过滤 `soft`
-- 如果只想看标签、不做过滤，使用 `--no-filter`
+- 默认仅 `us-hot` / `china-hot` 会触发 `soft` 过滤
+- `ai` / `finance` / `us-market` / `github` / `search` 默认不会启动分类
+- 如果关闭过滤，使用 `--no-filter`，此时也不会做额外抓取或分类
 - 如果想完全关闭语义能力，使用 `--no-semantic`
 - 如果想切到轻量过滤器，使用 `--filter-mode tfidf`
 
@@ -149,7 +149,8 @@ daily-cli search "人工智能"
 - `github` 使用 GitHub Trending 页面抓取热门项目、语言、Stars、Forks 和今日新增 Stars。
 - 标签分类保持为 `macro`、`industry`、`tech`、`public`、`soft`。
 - 默认后端为 `tfidf`，也支持 `model` 后端。
-- 默认仅 `us-hot` / `china-hot` 过滤 `soft`，其他预设默认只打标签不做拦截。
+- `tfidf` 后端内部使用 `TF-IDF + LogisticRegression + 少量词表` 的混合分类，训练语料由 `model` 伪标注样本和少量补充合成样本组成。
+- 默认仅 `us-hot` / `china-hot` 过滤 `soft`，其他预设默认既不拦截，也不启动分类。
 - Baidu 普通网页搜索较容易触发验证码，因此没有把它作为核心依赖接口。
 
 更详细的类别、来源、排序和降级逻辑说明见：

@@ -4,12 +4,12 @@
 
 当前版本还包含一个默认开启的语义过滤层：
 
-- 默认使用 `tfidf + prototype classifier + 少量词表`
+- 默认使用 `tfidf + LogisticRegression + 少量词表`
 - 也支持 `intfloat/multilingual-e5-small`
-- 默认对每条结果做语义打标
-- 默认仅 `us-hot` / `china-hot` 过滤 `soft`
-- 可通过 CLI 参数关闭语义打标、关闭过滤或切换后端
-- `summary` 和多 preset `fetch` 会先串行抓取，再把所有候选合并成一批做统一推理
+- 默认仅 `us-hot` / `china-hot` 触发 `soft` 过滤
+- 未配置过滤的 preset 默认不会启动分类
+- 可通过 CLI 参数关闭过滤或切换后端
+- 只有启用过滤的分组才会额外放大抓取条数并进入分类链路
 
 ## 1. 设计目标
 
@@ -383,7 +383,8 @@ Google 侧：
   - 用途：把 `title + summary + publisher` 编码成向量，再与预定义标签描述做相似度比较
 - `tfidf`
   - 不依赖大模型
-  - 使用固定标签原型文本、少量词表和 TF-IDF 相似度完成分类
+  - 使用固定标签原型文本、少量词表、TF-IDF 向量和 LogisticRegression 分类器完成分类
+  - 训练语料由 `model` 伪标注样本和少量补充合成样本组成
 
 因此：
 
@@ -407,10 +408,9 @@ Google 侧：
 
 ### 6.3 默认行为
 
-- `summary` / `fetch` / `search` 默认都会做语义打标
-- 默认仅 `us-hot` / `china-hot` 过滤 `soft`
-- 其他预设默认只展示标签，不做拦截
-- `--no-filter` 会保留标签但不删除结果
+- 默认仅 `us-hot` / `china-hot` 触发 `soft` 过滤
+- `ai` / `finance` / `us-market` / `github` / `search` 默认不启动分类
+- `--no-filter` 会直接关闭过滤链路，此时不会做额外抓取或分类
 - `--no-semantic` 会完全跳过语义模型
 - `--filter-mode tfidf` 会切到轻量 TF-IDF 过滤器
 

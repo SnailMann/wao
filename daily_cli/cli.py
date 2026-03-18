@@ -56,7 +56,7 @@ def add_common_fetch_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--no-filter",
         action="store_true",
-        help="保留语义标签，但不按标签过滤结果。",
+        help="关闭标签过滤链路，不做额外抓取或分类。",
     )
     parser.add_argument(
         "--exclude-label",
@@ -105,7 +105,7 @@ def add_search_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--no-filter",
         action="store_true",
-        help="保留语义标签，但不按标签过滤结果。",
+        help="关闭标签过滤链路，不做额外抓取或分类。",
     )
     parser.add_argument(
         "--exclude-label",

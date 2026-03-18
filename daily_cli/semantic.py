@@ -409,7 +409,28 @@ LABEL_KEYWORDS: dict[str, tuple[str, ...]] = {
         "网红餐厅",
         "爆火",
         "围观热议",
+        "演唱会",
+        "综艺",
+        "电影",
+        "追星",
+        "直播",
         "boyfriend",
+        "concert",
+        "entertainment",
+        "football",
+        "golf",
+        "match",
+        "movie",
+        "movies",
+        "music",
+        "nba",
+        "nfl",
+        "player",
+        "showbiz",
+        "soccer",
+        "sports",
+        "streaming",
+        "tour",
         "celebrity",
         "clickbait",
         "dating",
@@ -426,6 +447,86 @@ LABEL_KEYWORDS: dict[str, tuple[str, ...]] = {
         "viral",
         "wedding",
         "weird",
+    ),
+}
+
+# Small bilingual seed corpora used to stabilize the lexical backend
+# around the same label boundaries as the embedding model.
+LABEL_TRAINING_SAMPLES: dict[str, tuple[str, ...]] = {
+    "macro": (
+        "美联储暗示年内或继续降息，市场重新评估利率路径和通胀走势。",
+        "美国的四大盟友看向中国，民调显示国际关系重心正在变化。",
+        "国务院部署新一轮宏观政策，强调财政与就业协同发力。",
+        "White House weighs new tariffs as Fed officials monitor inflation.",
+        "Central bank signals possible rate cuts amid rising unemployment.",
+        "Diplomatic tensions escalate as allies debate foreign policy options.",
+        "今夜美联储料按兵不动，鲍威尔需要在通胀和增长之间寻找平衡。",
+        "外交部表示中美双方将继续就总统访华事保持沟通。",
+        "爱尔兰总理当特朗普面批关税和战争，欧美关系再起波澜。",
+        "New economic projections signal a tricky Federal Reserve path.",
+        "伊朗表示将打击中东三国石油设施，地区地缘风险快速升高。",
+    ),
+    "industry": (
+        "发改委推出新一批重大外资项目，制造业和汽车产业链继续扩张。",
+        "公司发布财报后扩大门店与供应链投资。",
+        "新能源车厂商提升销量并推进上游供应链合作。",
+        "Startup raises funding as automaker expands factory capacity.",
+        "Company posts strong earnings, revenue growth and new retail plans.",
+        "Manufacturing investment grows as suppliers add new orders.",
+        "畅通科创企业融资渠道，提升创新企业资本可得性。",
+        "奇瑞汽车营收首破3000亿元，过半收入来自海外市场。",
+        "微博发布财报，净利润同比增长49%。",
+        "零跑汽车首度实现全年盈利，成为新能源车行业黑马。",
+        "腾讯Q4营收同比增长13%，云业务全年实现规模化盈利。",
+        "SEC moves closer to ending quarterly earnings requirement.",
+        "Covetrus and MWI announce a multibillion-dollar merger.",
+    ),
+    "tech": (
+        "OpenAI launches a new model for agentic coding and developer workflows.",
+        "Nvidia unveils a new AI chip and data center software stack.",
+        "人工智能大模型推理芯片和开源软件平台迎来升级。",
+        "机器人研发团队发布新的智能体系统和算法能力。",
+        "Machine learning researchers release an open source inference toolkit.",
+        "Semiconductor company ships a new cloud AI accelerator.",
+        "阿里百度AI算力产品涨价，核心原因来自芯片供给变化。",
+        "科技向善，不能让AI技术沦为违法帮凶。",
+        "北京海淀举办人工智能发展趋势国际交流会。",
+        "Nvidia prepares for a return to China's AI chip market.",
+        "价值3000亿美元的印度外包产业正在接受AI浪潮冲击。",
+        "人工智能加速激活制造业新动能。",
+    ),
+    "public": (
+        "Judge ejects federal prosecutor from courtroom after ethics hearing.",
+        "Meningitis outbreak expands as health officials open vaccine clinics.",
+        "Hundreds of flights delayed after storms at a major airport.",
+        "医院发布疫苗接种和公共安全提示，学校同步调整安排。",
+        "洪水和地震导致多地紧急疏散与基础设施受损。",
+        "Police and emergency teams respond after a public safety incident.",
+        "多地中考新方案公布，教育治理改革持续推进。",
+        "Several court-related bills pass as session ends without budget deal.",
+        "Court to hear argument in case that could have significant impact on elections.",
+        "政绩观决定司法理念，法院系统强调依法履职。",
+        "法院发布新一批司法公告和审判安排。",
+    ),
+    "soft": (
+        "男子4S店买车一年蹭饭260次还打包，事件引发围观。",
+        "前方等位3200桌，女子排队到崩溃，网红餐厅冲上热搜。",
+        "网红爆料情感纠纷，围观热议不断发酵。",
+        "Concert tour announcement and celebrity fan frenzy dominate social media.",
+        "Streaming movie rankings and entertainment gossip take over trending searches.",
+        "Football and golf prediction chatter turns into another sports clickbait cycle.",
+        "Celebrity wedding gossip goes viral on social media.",
+        "Boyfriend girlfriend drama sparks online feud and clickbait headlines.",
+        "Bizarre family feud turns into another low-information viral story.",
+        "前同事背调一句话让男子月薪少了五千，引发网友围观。",
+        "审批通过后大批明星马上来武汉，演唱会经济成为热搜话题。",
+        "男子坐30小时大巴扛200斤特产看女儿，情绪化故事刷屏。",
+        "网红转型明星后持续爆红，围绕流量和人设的讨论发酵。",
+        "新春市集与明星演唱会联动，票根经济引发大规模围观。",
+        "Bears sign a defensive tackle to a one-year deal as transfer chatter heats up.",
+        "Masters picks and tournament betting stories dominate Augusta search trends.",
+        "A singer announces a summer concert stop and local entertainment news surges.",
+        "Club comeback dreams and match previews flood soccer hot searches.",
     ),
 }
 
@@ -473,6 +574,17 @@ def _load_runtime_dependencies():
         ) from exc
     transformers_logging.set_verbosity_error()
     return torch, functional, AutoModel, AutoTokenizer
+
+
+def _load_sklearn_dependencies():
+    try:
+        from sklearn.feature_extraction.text import TfidfVectorizer
+        from sklearn.linear_model import LogisticRegression
+    except ImportError as exc:
+        raise SemanticError(
+            "TF-IDF 过滤依赖未安装，请先执行 `python3 -m pip install .` 安装完整依赖。"
+        ) from exc
+    return TfidfVectorizer, LogisticRegression
 
 
 def _download_file(file_name: str, destination: Path) -> None:
@@ -717,13 +829,22 @@ def _extract_phrase_tokens(text: str, phrases: tuple[str, ...]) -> list[str]:
     if not phrases:
         return []
     ascii_haystack, cjk_haystack = _build_phrase_haystacks(text)
-    return [f"phrase:{phrase}" for phrase in phrases if _phrase_in_haystack(phrase, ascii_haystack, cjk_haystack)]
+    return [
+        _phrase_feature_name(phrase)
+        for phrase in phrases
+        if _phrase_in_haystack(phrase, ascii_haystack, cjk_haystack)
+    ]
+
+def _phrase_feature_name(phrase: str) -> str:
+    return f"phrase:{phrase.replace(' ', '_')}"
 
 
 class TfidfLabeler:
     def __init__(self) -> None:
+        TfidfVectorizer, LogisticRegression = _load_sklearn_dependencies()
         self._label_specs = LABEL_SPECS
         self._label_keywords = LABEL_KEYWORDS
+        self._label_by_key = {spec.key: spec for spec in self._label_specs}
         self._label_token_cues = {
             key: frozenset(_tokenize_text(" ".join(keywords)))
             for key, keywords in self._label_keywords.items()
@@ -742,53 +863,22 @@ class TfidfLabeler:
             ).strip()
             for spec in self._label_specs
         }
-        self._idf, self._prototype_vectors = self._build_prototypes()
-
-    def _build_prototypes(self) -> tuple[dict[str, float], dict[str, dict[str, float]]]:
-        doc_tokens: dict[str, list[str]] = {
-            key: self._weighted_tokens(text, weight=2, phrases=self._label_phrase_cues.get(key, ()))
-            for key, text in self._prototype_docs.items()
-        }
-        document_count = len(doc_tokens)
-        document_frequency: Counter[str] = Counter()
-        for tokens in doc_tokens.values():
-            document_frequency.update(set(tokens))
-
-        idf = {
-            token: math.log((1 + document_count) / (1 + frequency)) + 1.0
-            for token, frequency in document_frequency.items()
-        }
-        prototype_vectors = {
-            key: self._normalize_vector(self._tfidf_vector(tokens, idf))
-            for key, tokens in doc_tokens.items()
-        }
-        return idf, prototype_vectors
-
-    def _tfidf_vector(self, tokens: list[str], idf: dict[str, float]) -> dict[str, float]:
-        counts = Counter(token for token in tokens if token in idf)
-        if not counts:
-            return {}
-        token_count = sum(counts.values())
-        return {
-            token: (count / token_count) * idf[token]
-            for token, count in counts.items()
-        }
-
-    def _normalize_vector(self, vector: dict[str, float]) -> dict[str, float]:
-        magnitude = math.sqrt(sum(value * value for value in vector.values()))
-        if magnitude <= 0:
-            return {}
-        return {
-            token: value / magnitude
-            for token, value in vector.items()
-        }
-
-    def _cosine_similarity(self, left: dict[str, float], right: dict[str, float]) -> float:
-        if not left or not right:
-            return 0.0
-        if len(left) > len(right):
-            left, right = right, left
-        return sum(value * right.get(token, 0.0) for token, value in left.items())
+        self._vectorizer = TfidfVectorizer(
+            lowercase=False,
+            tokenizer=str.split,
+            preprocessor=None,
+            token_pattern=None,
+            ngram_range=(1, 2),
+            sublinear_tf=True,
+        )
+        self._classifier = LogisticRegression(
+            max_iter=1000,
+            class_weight="balanced",
+        )
+        train_documents, train_labels = self._build_training_corpus()
+        matrix = self._vectorizer.fit_transform(train_documents)
+        self._classifier.fit(matrix, train_labels)
+        self._label_classes = tuple(str(value) for value in self._classifier.classes_)
 
     def _weighted_tokens(self, text: str, weight: int, phrases: tuple[str, ...] | None = None) -> list[str]:
         base_tokens = _tokenize_text(text)
@@ -797,6 +887,47 @@ class TfidfLabeler:
         if not weighted:
             return []
         return weighted * max(1, weight)
+
+    def _feature_document(
+        self,
+        title: str,
+        summary: str = "",
+        *,
+        title_weight: int = 3,
+        summary_weight: int = 1,
+        phrases: tuple[str, ...] | None = None,
+    ) -> str:
+        tokens = self._weighted_tokens(title, weight=title_weight, phrases=phrases)
+        if summary:
+            tokens.extend(self._weighted_tokens(summary, weight=summary_weight, phrases=phrases))
+        if not tokens:
+            tokens = self._weighted_tokens(title or summary, weight=1, phrases=phrases)
+        return " ".join(tokens)
+
+    def _build_training_corpus(self) -> tuple[list[str], list[str]]:
+        documents: list[str] = []
+        labels: list[str] = []
+        for spec in self._label_specs:
+            phrases = self._label_phrase_cues.get(spec.key, ())
+            seeds = [
+                spec.prototype,
+                self._prototype_docs[spec.key],
+                *LABEL_TRAINING_SAMPLES.get(spec.key, ()),
+                " ".join(self._label_keywords.get(spec.key, ())),
+            ]
+            for seed in seeds:
+                document = self._feature_document(
+                    seed,
+                    "",
+                    title_weight=2,
+                    summary_weight=1,
+                    phrases=phrases,
+                )
+                if not document:
+                    continue
+                documents.append(document)
+                labels.append(spec.key)
+        return documents, labels
 
     def _cue_bonus(
         self,
@@ -830,6 +961,11 @@ class TfidfLabeler:
 
     def annotate_items(self, items: list[object], batch_size: int = 32) -> list[object]:
         del batch_size
+        if not items:
+            return items
+
+        feature_documents: list[str] = []
+        item_features: list[tuple[frozenset[str], frozenset[str], tuple[str, str], tuple[str, str]]] = []
         for item in items:
             title = getattr(item, "title", "")
             summary = getattr(item, "summary", "")
@@ -837,17 +973,25 @@ class TfidfLabeler:
             summary_tokens = frozenset(_tokenize_text(summary))
             title_haystacks = _build_phrase_haystacks(title)
             summary_haystacks = _build_phrase_haystacks(summary)
-            tokens = self._weighted_tokens(title, weight=3)
-            tokens.extend(self._weighted_tokens(summary, weight=1))
-            if not tokens:
-                tokens = self._weighted_tokens(title or summary, weight=1)
-            vector = self._normalize_vector(self._tfidf_vector(tokens, self._idf))
+            feature_documents.append(self._feature_document(title, summary))
+            item_features.append((title_tokens, summary_tokens, title_haystacks, summary_haystacks))
 
+        probability_rows = self._classifier.predict_proba(
+            self._vectorizer.transform(feature_documents)
+        )
+        classifier_baseline = 1.0 / len(self._label_classes)
+
+        for row_index, item in enumerate(items):
+            title_tokens, summary_tokens, title_haystacks, summary_haystacks = item_features[row_index]
+            probability_by_label = {
+                label_key: float(probability_rows[row_index][class_index])
+                for class_index, label_key in enumerate(self._label_classes)
+            }
             best_key = ""
             best_name = ""
             best_score = -1.0
             for spec in self._label_specs:
-                score = self._cosine_similarity(vector, self._prototype_vectors[spec.key])
+                score = probability_by_label.get(spec.key, classifier_baseline)
                 score += self._cue_bonus(
                     title_tokens,
                     summary_tokens,
@@ -857,7 +1001,7 @@ class TfidfLabeler:
                 )
                 if score > best_score:
                     best_key = spec.key
-                    best_name = spec.label
+                    best_name = self._label_by_key[spec.key].label
                     best_score = score
 
             item.content_label = best_key

@@ -52,8 +52,9 @@ class SemanticFilterTests(unittest.TestCase):
             "Prepared",
             (),
             {
-                "spec": type("Spec", (), {"default_excluded_labels": ("soft",)})(),
                 "final_limit": 5,
+                "blocked_labels": ("soft",),
+                "filter_active": True,
             },
         )()
 
@@ -61,9 +62,6 @@ class SemanticFilterTests(unittest.TestCase):
         result = _finalize_section(
             prepared,
             section,
-            semantic_enabled=True,
-            semantic_filter=True,
-            excluded_labels=None,
             filter_mode="model",
         )
 
@@ -89,8 +87,9 @@ class SemanticFilterTests(unittest.TestCase):
             "Prepared",
             (),
             {
-                "spec": type("Spec", (), {"default_excluded_labels": ("soft",)})(),
                 "final_limit": 5,
+                "blocked_labels": ("public",),
+                "filter_active": True,
             },
         )()
 
@@ -98,9 +97,6 @@ class SemanticFilterTests(unittest.TestCase):
         result = _finalize_section(
             prepared,
             section,
-            semantic_enabled=True,
-            semantic_filter=True,
-            excluded_labels=("public",),
             filter_mode="model",
         )
 
@@ -144,7 +140,7 @@ class SemanticFilterTests(unittest.TestCase):
 
     @patch("daily_cli.service.fetch_google_news_search")
     @patch("daily_cli.service.get_semantic_labeler")
-    def test_ai_preset_does_not_filter_by_default(
+    def test_ai_preset_does_not_trigger_semantic_by_default(
         self,
         mocked_labeler,
         mocked_google_news,
@@ -164,11 +160,68 @@ class SemanticFilterTests(unittest.TestCase):
             semantic_filter=True,
         )[0]
 
-        self.assertEqual(labeler.calls, [1])
-        self.assertTrue(section.semantic_enabled)
+        self.assertEqual(labeler.calls, [])
+        self.assertFalse(section.semantic_enabled)
         self.assertFalse(section.filter_enabled)
         self.assertEqual(section.filtered_count, 0)
         self.assertEqual(len(section.items), 1)
+        self.assertEqual(section.items[0].content_label, "")
+
+    @patch("daily_cli.service.fetch_github_trending")
+    @patch("daily_cli.service.get_semantic_labeler")
+    def test_github_preset_does_not_trigger_semantic_by_default(
+        self,
+        mocked_labeler,
+        mocked_github,
+    ) -> None:
+        labeler = StubLabeler()
+        mocked_labeler.return_value = labeler
+        mocked_github.return_value = [
+            NewsItem(title="obra/superpowers", category="github", provider="github", feed="GitHub Trending")
+        ]
+
+        section = collect_presets(
+            ["github"],
+            source="github",
+            limit=10,
+            timeout=1.0,
+            semantic_enabled=True,
+            semantic_filter=True,
+        )[0]
+
+        self.assertEqual(labeler.calls, [])
+        self.assertFalse(section.semantic_enabled)
+        self.assertFalse(section.filter_enabled)
+        self.assertEqual(len(section.items), 1)
+        self.assertEqual(section.items[0].content_label, "")
+
+    @patch("daily_cli.service.fetch_github_trending")
+    @patch("daily_cli.service.get_semantic_labeler")
+    def test_github_preset_triggers_semantic_when_excluded_labels_are_provided(
+        self,
+        mocked_labeler,
+        mocked_github,
+    ) -> None:
+        labeler = StubLabeler()
+        mocked_labeler.return_value = labeler
+        mocked_github.return_value = [
+            NewsItem(title="男子买车一年蹭饭260次还打包", category="github", provider="github", feed="GitHub Trending")
+        ]
+
+        section = collect_presets(
+            ["github"],
+            source="github",
+            limit=10,
+            timeout=1.0,
+            semantic_enabled=True,
+            semantic_filter=True,
+            excluded_labels=("soft",),
+        )[0]
+
+        self.assertEqual(labeler.calls, [1])
+        self.assertTrue(section.semantic_enabled)
+        self.assertTrue(section.filter_enabled)
+        self.assertEqual(section.filtered_count, 1)
 
 
 class TfidfLabelerTests(unittest.TestCase):
@@ -278,6 +331,22 @@ class TfidfLabelerTests(unittest.TestCase):
                 category="china-hot",
                 provider="baidu",
                 feed="Baidu Hotboard",
+            )
+        ]
+
+        labeler.annotate_items(items)
+
+        self.assertEqual(items[0].content_label, "soft")
+
+    def test_tfidf_labeler_marks_entertainment_story_as_soft(self) -> None:
+        labeler = TfidfLabeler()
+        items = [
+            NewsItem(
+                title="movies coming out in 2026",
+                summary="Best new streaming movies and entertainment picks for the year.",
+                category="us-hot",
+                provider="google",
+                feed="Google Trends",
             )
         ]
 
