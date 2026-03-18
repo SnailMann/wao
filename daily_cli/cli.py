@@ -5,6 +5,7 @@ import json
 
 from . import __version__
 from .output import render_json, render_text
+from .semantic import MODEL_REPO_ID, SemanticError, download_model, list_content_labels
 from .service import collect_preset, collect_search, collect_summary, list_presets
 
 
@@ -47,6 +48,28 @@ def add_common_fetch_args(parser: argparse.ArgumentParser) -> None:
         default="text",
         help="输出格式。",
     )
+    parser.add_argument(
+        "--no-semantic",
+        action="store_true",
+        help="关闭语义打标与标签展示。",
+    )
+    parser.add_argument(
+        "--no-filter",
+        action="store_true",
+        help="保留语义标签，但不按标签过滤结果。",
+    )
+    parser.add_argument(
+        "--exclude-label",
+        action="append",
+        choices=list_content_labels(),
+        default=None,
+        help="追加需要过滤掉的语义标签；默认过滤 soft。",
+    )
+    parser.add_argument(
+        "--semantic-model-dir",
+        default=None,
+        help="本地语义模型目录；默认使用 ~/.cache/daily-cli/models 下的预下载目录。",
+    )
 
 
 def add_search_args(parser: argparse.ArgumentParser) -> None:
@@ -68,6 +91,28 @@ def add_search_args(parser: argparse.ArgumentParser) -> None:
         default="text",
         help="输出格式。",
     )
+    parser.add_argument(
+        "--no-semantic",
+        action="store_true",
+        help="关闭语义打标与标签展示。",
+    )
+    parser.add_argument(
+        "--no-filter",
+        action="store_true",
+        help="保留语义标签，但不按标签过滤结果。",
+    )
+    parser.add_argument(
+        "--exclude-label",
+        action="append",
+        choices=list_content_labels(),
+        default=None,
+        help="追加需要过滤掉的语义标签；默认过滤 soft。",
+    )
+    parser.add_argument(
+        "--semantic-model-dir",
+        default=None,
+        help="本地语义模型目录；默认使用 ~/.cache/daily-cli/models 下的预下载目录。",
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -87,7 +132,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="输出格式。",
     )
 
-    summary_parser = subparsers.add_parser("summary", help="输出默认四类每日摘要。")
+    model_parser = subparsers.add_parser("model", help="下载或查看语义过滤所需模型。")
+    model_subparsers = model_parser.add_subparsers(dest="model_command", required=True)
+    model_download_parser = model_subparsers.add_parser("download", help="提前下载语义过滤模型文件。")
+    model_download_parser.add_argument(
+        "--model-dir",
+        default=None,
+        help="模型下载目录；默认使用 ~/.cache/daily-cli/models 下的缓存目录。",
+    )
+    model_download_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="强制重新下载模型文件。",
+    )
+
+    summary_parser = subparsers.add_parser("summary", help="输出默认五类每日摘要。")
     add_common_fetch_args(summary_parser)
 
     fetch_parser = subparsers.add_parser("fetch", help="获取一个或多个预设分组。")
@@ -134,6 +193,7 @@ def main(argv: list[str] | None = None) -> int:
                             "supported_sources": list(spec.supported_sources),
                             "default_sources": list(spec.default_sources),
                             "default_limit": spec.default_limit,
+                            "default_excluded_labels": list(spec.default_excluded_labels),
                         }
                         for spec in list_presets()
                     ]
@@ -144,19 +204,46 @@ def main(argv: list[str] | None = None) -> int:
             for spec in list_presets():
                 supported = ", ".join(spec.supported_sources)
                 default = ", ".join(spec.default_sources)
+                excluded = ", ".join(spec.default_excluded_labels) or "无"
                 print(f"{spec.key}: {spec.label}")
                 print(f"  {spec.description}")
                 print(f"  supported={supported} default={default} limit={spec.default_limit}")
+                print(f"  exclude={excluded}")
             return 0
 
+        if args.command == "model":
+            if args.model_command == "download":
+                model_path = download_model(model_dir=args.model_dir, force=args.force)
+                print(f"模型: {MODEL_REPO_ID}")
+                print(f"目录: {model_path}")
+                print("状态: 已下载，可直接用于 summary/fetch/search")
+                return 0
+
         if args.command == "summary":
-            sections = collect_summary(source=args.source, limit=args.limit, timeout=args.timeout)
+            sections = collect_summary(
+                source=args.source,
+                limit=args.limit,
+                timeout=args.timeout,
+                semantic_enabled=not args.no_semantic,
+                semantic_filter=not args.no_semantic and not args.no_filter,
+                excluded_labels=tuple(args.exclude_label) if args.exclude_label else None,
+                semantic_model_dir=args.semantic_model_dir,
+            )
             print(emit_output(args.format, sections), end="")
             return 0
 
         if args.command == "fetch":
             sections = [
-                collect_preset(key, source=args.source, limit=args.limit, timeout=args.timeout)
+                collect_preset(
+                    key,
+                    source=args.source,
+                    limit=args.limit,
+                    timeout=args.timeout,
+                    semantic_enabled=not args.no_semantic,
+                    semantic_filter=not args.no_semantic and not args.no_filter,
+                    excluded_labels=tuple(args.exclude_label) if args.exclude_label else None,
+                    semantic_model_dir=args.semantic_model_dir,
+                )
                 for key in args.presets
             ]
             print(emit_output(args.format, sections), end="")
@@ -168,10 +255,14 @@ def main(argv: list[str] | None = None) -> int:
                 limit=args.limit,
                 timeout=args.timeout,
                 google_locale=args.google_locale,
+                semantic_enabled=not args.no_semantic,
+                semantic_filter=not args.no_semantic and not args.no_filter,
+                excluded_labels=tuple(args.exclude_label) if args.exclude_label else None,
+                semantic_model_dir=args.semantic_model_dir,
             )
             print(emit_output(args.format, [section]), end="")
             return 0
-    except ValueError as exc:
+    except (ValueError, SemanticError) as exc:
         parser.error(str(exc))
 
     return 1
