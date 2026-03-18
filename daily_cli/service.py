@@ -15,6 +15,7 @@ from .sources import (
     dedupe_items,
     fetch_baidu_realtime,
     fetch_github_trending,
+    fetch_google_news_top,
     fetch_google_news_search,
     fetch_google_trends_us,
     filter_items_by_keywords,
@@ -120,7 +121,7 @@ PRESET_SPECS = {
     ),
     "ai": PresetSpec(
         key="ai",
-        label="AI 发展趋势",
+        label="AI发展",
         description="聚合 Google News RSS 与百度热榜中的 AI 相关条目。",
         supported_sources=("google", "baidu"),
         default_sources=("google", "baidu"),
@@ -368,9 +369,67 @@ def _annotate_prepared_sections(
     labeler.annotate_items(all_items)
 
 
+def _refill_us_hot_with_google_news(
+    prepared: PreparedSection,
+    section: SectionResult,
+    seen_titles: set[str],
+    timeout: float,
+    semantic_model_dir: str | None,
+    filter_mode: str,
+) -> bool:
+    spec = getattr(prepared, "spec", None)
+    if getattr(spec, "key", "") != "us-hot":
+        return False
+
+    missing = prepared.final_limit - len(section.items)
+    if missing <= 0:
+        return False
+
+    refill_limit = _candidate_limit(missing, True)
+    try:
+        refill_items = dedupe_items(
+            fetch_google_news_top(
+                limit=refill_limit,
+                timeout=timeout,
+                category=prepared.spec.key,
+                locale="us",
+            ),
+            limit=refill_limit,
+        )
+    except FetchError as exc:
+        section.warnings.append(f"google news 回补失败: {exc}")
+        return True
+
+    unique_refill: list[NewsItem] = []
+    for item in refill_items:
+        normalized = normalize_title(item.title)
+        if not normalized or normalized in seen_titles:
+            continue
+        seen_titles.add(normalized)
+        unique_refill.append(item)
+
+    if not unique_refill:
+        return True
+
+    labeler = get_semantic_labeler(semantic_model_dir, backend=filter_mode)
+    labeler.annotate_items(unique_refill)
+
+    for item in unique_refill:
+        if item.content_label and item.content_label in prepared.blocked_labels:
+            section.filtered_count += 1
+            continue
+        section.items.append(item)
+        if len(section.items) >= prepared.final_limit:
+            break
+
+    return True
+
+
 def _finalize_section(
     prepared: PreparedSection,
     section: SectionResult,
+    timeout: float,
+    semantic_model_dir: str | None,
     filter_mode: str,
 ) -> SectionResult:
     final_limit = prepared.final_limit
@@ -388,6 +447,7 @@ def _finalize_section(
     section.filter_enabled = True
     section.excluded_labels = list(prepared.blocked_labels)
 
+    seen_titles = {normalize_title(item.title) for item in section.items if normalize_title(item.title)}
     kept: list[NewsItem] = []
     filtered_count = 0
     for item in section.items:
@@ -399,11 +459,28 @@ def _finalize_section(
     section.items = kept
     section.filtered_count = filtered_count
 
+    refill_attempted = _refill_us_hot_with_google_news(
+        prepared,
+        section,
+        seen_titles=seen_titles,
+        timeout=timeout,
+        semantic_model_dir=semantic_model_dir,
+        filter_mode=filter_mode,
+    )
+
     if filtered_count and not section.items and not section.warnings:
         section.warnings.append("语义过滤后没有保留结果。")
 
     if len(section.items) > final_limit:
         section.items = section.items[:final_limit]
+    if (
+        refill_attempted
+        and len(section.items) < final_limit
+        and not any("回补" in warning for warning in section.warnings)
+    ):
+        section.warnings.append(
+            f"语义过滤后仅保留 {len(section.items)} 条，已尝试使用 Google News Top Stories 回补。"
+        )
     if not section.items and not section.warnings:
         section.warnings.append("没有获取到结果。")
     return section
@@ -447,6 +524,8 @@ def collect_presets(
         _finalize_section(
             prepared,
             prepared.section,
+            timeout=timeout,
+            semantic_model_dir=semantic_model_dir,
             filter_mode=filter_mode,
         )
         for prepared in prepared_sections
@@ -563,5 +642,7 @@ def collect_search(
     return _finalize_section(
         prepared,
         section,
+        timeout=timeout,
+        semantic_model_dir=semantic_model_dir,
         filter_mode=filter_mode,
     )

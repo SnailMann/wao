@@ -225,6 +225,18 @@ LABEL_KEYWORDS: dict[str, tuple[str, ...]] = {
         "ally",
         "diplomatic",
         "geopolitics",
+        "中东",
+        "防长",
+        "情报部长",
+        "革命卫队",
+        "无人机袭击",
+        "天然气供应",
+        "能源安全",
+        "gas supply",
+        "energy security",
+        "intelligence minister",
+        "defense minister",
+        "military strike",
     ),
     "industry": (
         "公司",
@@ -409,14 +421,51 @@ LABEL_KEYWORDS: dict[str, tuple[str, ...]] = {
         "网红餐厅",
         "爆火",
         "围观热议",
+        "老婆孩子",
+        "妻儿",
+        "背调",
+        "前同事",
+        "一句话",
+        "月薪",
+        "降薪",
+        "生活作风",
+        "跳下去",
+        "落水",
+        "垂钓",
+        "挂念",
+        "假装上班",
+        "付费工位",
+        "朝九晚五",
+        "加班费",
+        "月入七八万",
+        "高学历标签",
+        "送外卖",
+        "看女儿",
+        "看望",
+        "刷屏",
+        "欢呼鼓掌",
+        "汉服",
+        "御剑飞行",
         "演唱会",
         "综艺",
         "电影",
         "追星",
         "直播",
+        "专辑",
+        "新专辑",
+        "单曲",
+        "歌手",
+        "艺人",
+        "乐队",
+        "巡演",
+        "票房",
+        "票务",
         "boyfriend",
         "concert",
         "entertainment",
+        "album",
+        "artist",
+        "band",
         "football",
         "golf",
         "match",
@@ -426,10 +475,14 @@ LABEL_KEYWORDS: dict[str, tuple[str, ...]] = {
         "nba",
         "nfl",
         "player",
+        "release date",
+        "single",
+        "singer",
         "showbiz",
         "soccer",
         "sports",
         "streaming",
+        "ticket",
         "tour",
         "celebrity",
         "clickbait",
@@ -465,6 +518,8 @@ LABEL_TRAINING_SAMPLES: dict[str, tuple[str, ...]] = {
         "爱尔兰总理当特朗普面批关税和战争，欧美关系再起波澜。",
         "New economic projections signal a tricky Federal Reserve path.",
         "伊朗表示将打击中东三国石油设施，地区地缘风险快速升高。",
+        "伊拉克称伊朗天然气供应完全中断，中东能源安全风险再度升高。",
+        "以防长称伊朗情报部长身亡，中东冲突与情报战进一步升级。",
     ),
     "industry": (
         "发改委推出新一批重大外资项目，制造业和汽车产业链继续扩张。",
@@ -512,6 +567,10 @@ LABEL_TRAINING_SAMPLES: dict[str, tuple[str, ...]] = {
         "男子4S店买车一年蹭饭260次还打包，事件引发围观。",
         "前方等位3200桌，女子排队到崩溃，网红餐厅冲上热搜。",
         "网红爆料情感纠纷，围观热议不断发酵。",
+        "“我想跳下去 但想到了老婆孩子”，个体情绪化叙事和家庭牵挂引发围观。",
+        "前同事背调一句话让男子月薪少了五千，围绕生活作风和降薪的个案传播。",
+        "点外卖米饭变质后商家只赔米饭钱，案件细节比公共价值更吸引围观。",
+        "九旬夫妻两天内相继去世共同出殡，这类情绪化个体故事容易成为低信息热搜。",
         "Concert tour announcement and celebrity fan frenzy dominate social media.",
         "Streaming movie rankings and entertainment gossip take over trending searches.",
         "Football and golf prediction chatter turns into another sports clickbait cycle.",
@@ -519,16 +578,59 @@ LABEL_TRAINING_SAMPLES: dict[str, tuple[str, ...]] = {
         "Boyfriend girlfriend drama sparks online feud and clickbait headlines.",
         "Bizarre family feud turns into another low-information viral story.",
         "前同事背调一句话让男子月薪少了五千，引发网友围观。",
+        "假装上班公司提供付费工位和朝九晚五体验，月入七八万的故事冲上热搜。",
+        "高学历标签和送外卖视频引发流量讨论，围绕个体人设的争议刷屏。",
         "审批通过后大批明星马上来武汉，演唱会经济成为热搜话题。",
         "男子坐30小时大巴扛200斤特产看女儿，情绪化故事刷屏。",
         "网红转型明星后持续爆红，围绕流量和人设的讨论发酵。",
         "新春市集与明星演唱会联动，票根经济引发大规模围观。",
+        "歌手官宣新专辑和巡演计划，粉丝围绕发行日期和票务信息热议。",
+        "Artist announces a new album, release date and summer tour stop.",
+        "Singer reveals a single, track list and ticket plan for the upcoming tour.",
         "Bears sign a defensive tackle to a one-year deal as transfer chatter heats up.",
         "Masters picks and tournament betting stories dominate Augusta search trends.",
         "A singer announces a summer concert stop and local entertainment news surges.",
         "Club comeback dreams and match previews flood soccer hot searches.",
     ),
 }
+
+SOFT_STORY_CUES = (
+    "老婆孩子",
+    "妻儿",
+    "背调",
+    "前同事",
+    "一句话",
+    "月薪",
+    "降薪",
+    "生活作风",
+    "跳下去",
+    "落水",
+    "垂钓",
+    "挂念",
+    "围观",
+    "崩溃",
+    "蹭饭",
+    "打包",
+    "出殡",
+    "假装上班",
+    "付费工位",
+    "朝九晚五",
+    "加班费",
+    "月入七八万",
+    "高学历标签",
+    "送外卖",
+    "看女儿",
+    "看望",
+    "刷屏",
+    "欢呼鼓掌",
+    "汉服",
+    "御剑飞行",
+    "album",
+    "single",
+    "singer",
+    "tour",
+    "release date",
+)
 
 
 def list_content_labels() -> tuple[str, ...]:
@@ -853,6 +955,14 @@ class TfidfLabeler:
             key: _phrase_candidates(keywords)
             for key, keywords in self._label_keywords.items()
         }
+        self._soft_story_tokens = frozenset(_tokenize_text(" ".join(SOFT_STORY_CUES)))
+        self._soft_story_phrases = tuple(
+            dict.fromkeys(
+                normalized
+                for cue in SOFT_STORY_CUES
+                if (normalized := _normalize_phrase(cue))
+            )
+        )
         self._all_phrase_cues = tuple(
             dict.fromkeys(phrase for phrases in self._label_phrase_cues.values() for phrase in phrases)
         )
@@ -892,16 +1002,20 @@ class TfidfLabeler:
         self,
         title: str,
         summary: str = "",
+        publisher: str = "",
         *,
         title_weight: int = 3,
         summary_weight: int = 1,
+        publisher_weight: int = 1,
         phrases: tuple[str, ...] | None = None,
     ) -> str:
         tokens = self._weighted_tokens(title, weight=title_weight, phrases=phrases)
         if summary:
             tokens.extend(self._weighted_tokens(summary, weight=summary_weight, phrases=phrases))
+        if publisher:
+            tokens.extend(self._weighted_tokens(publisher, weight=publisher_weight, phrases=phrases))
         if not tokens:
-            tokens = self._weighted_tokens(title or summary, weight=1, phrases=phrases)
+            tokens = self._weighted_tokens(title or summary or publisher, weight=1, phrases=phrases)
         return " ".join(tokens)
 
     def _build_training_corpus(self) -> tuple[list[str], list[str]]:
@@ -933,8 +1047,10 @@ class TfidfLabeler:
         self,
         title_tokens: frozenset[str],
         summary_tokens: frozenset[str],
+        publisher_tokens: frozenset[str],
         title_haystacks: tuple[str, str],
         summary_haystacks: tuple[str, str],
+        publisher_haystacks: tuple[str, str],
         label_key: str,
     ) -> float:
         cue_tokens = self._label_token_cues.get(label_key, frozenset())
@@ -942,20 +1058,49 @@ class TfidfLabeler:
 
         title_token_hits = len(title_tokens & cue_tokens)
         summary_token_hits = len(summary_tokens & cue_tokens)
+        publisher_token_hits = len(publisher_tokens & cue_tokens)
 
         title_ascii, title_cjk = title_haystacks
         summary_ascii, summary_cjk = summary_haystacks
+        publisher_ascii, publisher_cjk = publisher_haystacks
         title_phrase_hits = sum(1 for phrase in cue_phrases if _phrase_in_haystack(phrase, title_ascii, title_cjk))
         summary_phrase_hits = sum(1 for phrase in cue_phrases if _phrase_in_haystack(phrase, summary_ascii, summary_cjk))
+        publisher_phrase_hits = sum(
+            1 for phrase in cue_phrases if _phrase_in_haystack(phrase, publisher_ascii, publisher_cjk)
+        )
 
         bonus = 0.0
         bonus += min(0.36, title_token_hits * 0.05)
         bonus += min(0.24, summary_token_hits * 0.03)
+        bonus += min(0.12, publisher_token_hits * 0.02)
         bonus += min(0.32, title_phrase_hits * 0.14)
         bonus += min(0.18, summary_phrase_hits * 0.08)
+        bonus += min(0.08, publisher_phrase_hits * 0.04)
 
         if label_key == "soft" and title_phrase_hits:
             bonus += 0.06
+            soft_title_token_hits = len(title_tokens & self._soft_story_tokens)
+            soft_summary_token_hits = len(summary_tokens & self._soft_story_tokens)
+            soft_publisher_token_hits = len(publisher_tokens & self._soft_story_tokens)
+            soft_title_phrase_hits = sum(
+                1 for phrase in self._soft_story_phrases if _phrase_in_haystack(phrase, title_ascii, title_cjk)
+            )
+            soft_summary_phrase_hits = sum(
+                1 for phrase in self._soft_story_phrases if _phrase_in_haystack(phrase, summary_ascii, summary_cjk)
+            )
+            soft_publisher_phrase_hits = sum(
+                1
+                for phrase in self._soft_story_phrases
+                if _phrase_in_haystack(phrase, publisher_ascii, publisher_cjk)
+            )
+            bonus += min(0.24, soft_title_phrase_hits * 0.10)
+            bonus += min(0.16, soft_summary_phrase_hits * 0.05)
+            bonus += min(0.08, soft_publisher_phrase_hits * 0.04)
+            bonus += min(0.14, soft_title_token_hits * 0.03)
+            bonus += min(0.10, soft_summary_token_hits * 0.02)
+            bonus += min(0.04, soft_publisher_token_hits * 0.01)
+            if soft_title_phrase_hits + soft_summary_phrase_hits + soft_publisher_phrase_hits >= 2:
+                bonus += 0.12
 
         return bonus
 
@@ -965,16 +1110,59 @@ class TfidfLabeler:
             return items
 
         feature_documents: list[str] = []
-        item_features: list[tuple[frozenset[str], frozenset[str], tuple[str, str], tuple[str, str]]] = []
+        item_features: list[
+            tuple[
+                frozenset[str],
+                frozenset[str],
+                frozenset[str],
+                tuple[str, str],
+                tuple[str, str],
+                tuple[str, str],
+            ]
+        ] = []
         for item in items:
             title = getattr(item, "title", "")
             summary = getattr(item, "summary", "")
+            publisher = getattr(item, "publisher", "")
             title_tokens = frozenset(_tokenize_text(title))
             summary_tokens = frozenset(_tokenize_text(summary))
+            publisher_tokens = frozenset(_tokenize_text(publisher))
             title_haystacks = _build_phrase_haystacks(title)
             summary_haystacks = _build_phrase_haystacks(summary)
-            feature_documents.append(self._feature_document(title, summary))
-            item_features.append((title_tokens, summary_tokens, title_haystacks, summary_haystacks))
+            publisher_haystacks = _build_phrase_haystacks(publisher)
+
+            title_weight = 3
+            summary_weight = 1
+            publisher_weight = 1
+            if summary:
+                title_signal_tokens = len(title_tokens)
+                if title_signal_tokens <= 2:
+                    title_weight = 1
+                    summary_weight = 3
+                elif title_signal_tokens <= 4:
+                    title_weight = 2
+                    summary_weight = 2
+
+            feature_documents.append(
+                self._feature_document(
+                    title,
+                    summary,
+                    publisher,
+                    title_weight=title_weight,
+                    summary_weight=summary_weight,
+                    publisher_weight=publisher_weight,
+                )
+            )
+            item_features.append(
+                (
+                    title_tokens,
+                    summary_tokens,
+                    publisher_tokens,
+                    title_haystacks,
+                    summary_haystacks,
+                    publisher_haystacks,
+                )
+            )
 
         probability_rows = self._classifier.predict_proba(
             self._vectorizer.transform(feature_documents)
@@ -982,7 +1170,14 @@ class TfidfLabeler:
         classifier_baseline = 1.0 / len(self._label_classes)
 
         for row_index, item in enumerate(items):
-            title_tokens, summary_tokens, title_haystacks, summary_haystacks = item_features[row_index]
+            (
+                title_tokens,
+                summary_tokens,
+                publisher_tokens,
+                title_haystacks,
+                summary_haystacks,
+                publisher_haystacks,
+            ) = item_features[row_index]
             probability_by_label = {
                 label_key: float(probability_rows[row_index][class_index])
                 for class_index, label_key in enumerate(self._label_classes)
@@ -995,8 +1190,10 @@ class TfidfLabeler:
                 score += self._cue_bonus(
                     title_tokens,
                     summary_tokens,
+                    publisher_tokens,
                     title_haystacks,
                     summary_haystacks,
+                    publisher_haystacks,
                     spec.key,
                 )
                 if score > best_score:

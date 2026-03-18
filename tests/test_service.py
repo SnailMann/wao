@@ -26,6 +26,25 @@ class StubLabeler:
         return items
 
 
+class UsHotRefillLabeler:
+    def __init__(self) -> None:
+        self.calls: list[int] = []
+
+    def annotate_items(self, items: list[NewsItem]) -> list[NewsItem]:
+        self.calls.append(len(items))
+        for item in items:
+            lowered = item.title.casefold()
+            if any(term in lowered for term in ("niall", "masters", "movie", "concert", "album")):
+                item.content_label = "soft"
+                item.content_label_name = "软信息"
+                item.content_label_score = 0.83
+            else:
+                item.content_label = "public"
+                item.content_label_name = "公共事务"
+                item.content_label_score = 0.76
+        return items
+
+
 def make_section(items: list[NewsItem]) -> SectionResult:
     return SectionResult(
         key="china-hot",
@@ -62,6 +81,8 @@ class SemanticFilterTests(unittest.TestCase):
         result = _finalize_section(
             prepared,
             section,
+            timeout=1.0,
+            semantic_model_dir=None,
             filter_mode="model",
         )
 
@@ -97,6 +118,8 @@ class SemanticFilterTests(unittest.TestCase):
         result = _finalize_section(
             prepared,
             section,
+            timeout=1.0,
+            semantic_model_dir=None,
             filter_mode="model",
         )
 
@@ -106,12 +129,14 @@ class SemanticFilterTests(unittest.TestCase):
         self.assertEqual(result.items[0].content_label, "soft")
 
     @patch("daily_cli.service.fetch_baidu_realtime")
+    @patch("daily_cli.service.fetch_google_news_top")
     @patch("daily_cli.service.fetch_google_trends_us")
     @patch("daily_cli.service.get_semantic_labeler")
     def test_collect_presets_uses_single_global_annotation_batch(
         self,
         mocked_labeler,
         mocked_google_trends,
+        mocked_google_news_top,
         mocked_baidu,
     ) -> None:
         labeler = StubLabeler()
@@ -119,6 +144,7 @@ class SemanticFilterTests(unittest.TestCase):
         mocked_google_trends.return_value = [
             NewsItem(title="Federal Reserve signals more cuts", category="us-hot", provider="google", feed="Google Trends")
         ]
+        mocked_google_news_top.return_value = []
         mocked_baidu.return_value = [
             NewsItem(title="男子买车一年蹭饭260次还打包", category="china-hot", provider="baidu", feed="Baidu Hotboard")
         ]
@@ -222,6 +248,95 @@ class SemanticFilterTests(unittest.TestCase):
         self.assertTrue(section.semantic_enabled)
         self.assertTrue(section.filter_enabled)
         self.assertEqual(section.filtered_count, 1)
+
+    @patch("daily_cli.service.fetch_google_news_top")
+    @patch("daily_cli.service.fetch_google_trends_us")
+    @patch("daily_cli.service.get_semantic_labeler")
+    def test_us_hot_refills_with_google_news_after_soft_filter(
+        self,
+        mocked_labeler,
+        mocked_google_trends,
+        mocked_google_news_top,
+    ) -> None:
+        labeler = UsHotRefillLabeler()
+        mocked_labeler.return_value = labeler
+        mocked_google_trends.return_value = [
+            NewsItem(title="niall horan", category="us-hot", provider="google", feed="Google Trends"),
+            NewsItem(title="masters 2026", category="us-hot", provider="google", feed="Google Trends"),
+        ]
+        mocked_google_news_top.return_value = [
+            NewsItem(
+                title="denver airport",
+                summary="Power outage impacts train service to gates.",
+                publisher="CBS News",
+                category="us-hot",
+                provider="google",
+                feed="Google News",
+            ),
+            NewsItem(
+                title="meningococcal meningitis outbreak",
+                summary="Health officials raise alarms after outbreak expands.",
+                publisher="The New York Times",
+                category="us-hot",
+                provider="google",
+                feed="Google News",
+            ),
+        ]
+
+        section = collect_presets(
+            ["us-hot"],
+            source="google",
+            limit=2,
+            timeout=1.0,
+            semantic_enabled=True,
+            semantic_filter=True,
+        )[0]
+
+        self.assertEqual(labeler.calls, [2, 2])
+        self.assertEqual([item.title for item in section.items], ["denver airport", "meningococcal meningitis outbreak"])
+        self.assertEqual(section.filtered_count, 2)
+        mocked_google_news_top.assert_called_once()
+
+    @patch("daily_cli.service.fetch_google_news_top")
+    @patch("daily_cli.service.fetch_google_trends_us")
+    @patch("daily_cli.service.get_semantic_labeler")
+    def test_us_hot_skips_google_news_refill_when_enough_items_remain(
+        self,
+        mocked_labeler,
+        mocked_google_trends,
+        mocked_google_news_top,
+    ) -> None:
+        labeler = UsHotRefillLabeler()
+        mocked_labeler.return_value = labeler
+        mocked_google_trends.return_value = [
+            NewsItem(
+                title="denver airport",
+                summary="Power outage impacts train service to gates.",
+                category="us-hot",
+                provider="google",
+                feed="Google Trends",
+            ),
+            NewsItem(
+                title="meningococcal meningitis outbreak",
+                summary="Health officials raise alarms after outbreak expands.",
+                category="us-hot",
+                provider="google",
+                feed="Google Trends",
+            ),
+        ]
+
+        section = collect_presets(
+            ["us-hot"],
+            source="google",
+            limit=2,
+            timeout=1.0,
+            semantic_enabled=True,
+            semantic_filter=True,
+        )[0]
+
+        self.assertEqual(labeler.calls, [2])
+        self.assertEqual(len(section.items), 2)
+        mocked_google_news_top.assert_not_called()
 
 
 class TfidfLabelerTests(unittest.TestCase):
@@ -353,6 +468,96 @@ class TfidfLabelerTests(unittest.TestCase):
         labeler.annotate_items(items)
 
         self.assertEqual(items[0].content_label, "soft")
+
+    def test_tfidf_labeler_marks_family_rescue_story_as_soft(self) -> None:
+        labeler = TfidfLabeler()
+        items = [
+            NewsItem(
+                title="“我想跳下去 但想到了老婆孩子”",
+                summary=(
+                    "市民在珠江边垂钓时发现有人落水，起初想下水施救，"
+                    "但因挂念妻儿而放弃贸然下水，随后持续呼喊求救并引来水警。"
+                ),
+                category="china-hot",
+                provider="baidu",
+                feed="Baidu Hotboard",
+            )
+        ]
+
+        labeler.annotate_items(items)
+
+        self.assertEqual(items[0].content_label, "soft")
+
+    def test_tfidf_labeler_marks_background_check_story_as_soft(self) -> None:
+        labeler = TfidfLabeler()
+        items = [
+            NewsItem(
+                title="前同事背调一句话 男子月薪少5千",
+                summary=(
+                    "北京丰台法院审理一起背景调查不实导致求职者降薪的案件，"
+                    "背调公司因前同事关于生活作风问题的一句话出具报告。"
+                ),
+                category="china-hot",
+                provider="baidu",
+                feed="Baidu Hotboard",
+            )
+        ]
+
+        labeler.annotate_items(items)
+
+        self.assertEqual(items[0].content_label, "soft")
+
+    def test_tfidf_labeler_marks_fake_office_story_as_soft(self) -> None:
+        labeler = TfidfLabeler()
+        items = [
+            NewsItem(
+                title="假装上班公司有“员工”月入七八万",
+                summary=(
+                    "杭州一家提供付费工位的假装上班公司走红，"
+                    "每天花30元就能体验朝九晚五和加班到深夜。"
+                ),
+                category="china-hot",
+                provider="baidu",
+                feed="Baidu Hotboard",
+            )
+        ]
+
+        labeler.annotate_items(items)
+
+        self.assertEqual(items[0].content_label, "soft")
+
+    def test_tfidf_labeler_marks_album_announcement_as_soft(self) -> None:
+        labeler = TfidfLabeler()
+        items = [
+            NewsItem(
+                title="niall horan",
+                summary="Niall Horan announces a new album, release date and summer tour plans.",
+                category="us-hot",
+                provider="google",
+                feed="Google Trends",
+                publisher="Clash Magazine",
+            )
+        ]
+
+        labeler.annotate_items(items)
+
+        self.assertEqual(items[0].content_label, "soft")
+
+    def test_tfidf_labeler_marks_middle_east_conflict_story_as_macro(self) -> None:
+        labeler = TfidfLabeler()
+        items = [
+            NewsItem(
+                title="以防长称伊朗情报部长身亡",
+                summary="消息称中东冲突升级，伊朗情报系统高层在袭击中死亡。",
+                category="china-hot",
+                provider="baidu",
+                feed="Baidu Hotboard",
+            )
+        ]
+
+        labeler.annotate_items(items)
+
+        self.assertEqual(items[0].content_label, "macro")
 
 
 if __name__ == "__main__":

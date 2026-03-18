@@ -229,6 +229,22 @@ def fetch_google_news_search(
     return parse_google_news_rss(xml_text, limit=limit, category=category)
 
 
+def fetch_google_news_top(
+    limit: int,
+    timeout: float,
+    category: str,
+    locale: str = "us",
+) -> list[NewsItem]:
+    locale_config = GOOGLE_LOCALES.get(locale, GOOGLE_LOCALES["us"])
+    params = {
+        "hl": locale_config["hl"],
+        "gl": locale_config["gl"],
+        "ceid": locale_config["ceid"],
+    }
+    xml_text = fetch_text("https://news.google.com/rss", params=params, timeout=timeout)
+    return parse_google_news_rss(xml_text, limit=limit, category=category)
+
+
 def _extract_anchor_metric(article_html: str, suffix: str) -> str:
     pattern = rf'<a[^>]+href="[^"]*{re.escape(suffix)}"[^>]*>(.*?)</a>'
     match = re.search(pattern, article_html, flags=re.DOTALL)

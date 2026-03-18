@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from textwrap import dedent
 
 from . import __version__
 from .output import render_json, render_text
@@ -21,6 +22,69 @@ def positive_float(value: str) -> float:
     if parsed <= 0:
         raise argparse.ArgumentTypeError("必须是大于 0 的数字")
     return parsed
+
+
+def _preset_summary() -> str:
+    return "us-hot, china-hot, ai, finance, us-market, github"
+
+
+def _top_level_help_epilog() -> str:
+    return dedent(
+        f"""\
+        命令:
+          presets
+            查看全部预设、默认来源、默认 limit 和默认过滤标签。
+          model download
+            下载 model 过滤模式所需模型；仅使用 tfidf 时可跳过。
+          summary
+            输出默认五类摘要: us-hot, china-hot, ai, finance, github
+          fetch <preset...>
+            拉取一个或多个预设，可选: {_preset_summary()}
+          search <query>
+            按关键词通过 Google News 查询最新信息
+
+        常用查询参数:
+          --source auto|google|baidu|github|all
+            指定数据来源；默认按预设自动选择。
+          --limit N
+            控制每个分组返回条数。
+          --timeout SECONDS
+            控制单个上游接口超时时间。
+          --format text|json
+            切换终端文本或 JSON 输出。
+
+        过滤与标签参数:
+          --filter-mode tfidf|model
+            选择过滤后端；默认 tfidf，model 需先执行 `daily-cli model download`。
+          --exclude-label macro|industry|tech|public|soft
+            追加要过滤掉的标签。
+          --no-filter
+            关闭过滤链路；不会为了过滤做额外抓取或分类。
+          --no-semantic
+            完全关闭标签分类、标签展示和过滤。
+          --semantic-model-dir PATH
+            指定本地语义模型目录。
+
+        预设与默认行为:
+          预设:
+            {_preset_summary()}
+          默认仅 us-hot / china-hot 过滤 soft。
+          ai / finance / us-market / github / search 默认不启动分类。
+          us-hot 过滤后不足时，会按需用 Google News Top Stories 回补。
+          search 默认只检索；显式传入 --exclude-label 后才会启动过滤。
+
+        提示:
+          运行 `daily-cli <command> --help` 查看该命令的详细参数。
+
+        常用示例:
+          daily-cli summary
+          daily-cli summary --filter-mode tfidf --limit 5
+          daily-cli fetch us-hot china-hot --exclude-label soft
+          daily-cli fetch github --limit 10 --format json
+          daily-cli search "人工智能" --google-locale cn
+          daily-cli model download
+        """
+    )
 
 
 def add_common_fetch_args(parser: argparse.ArgumentParser) -> None:
@@ -51,19 +115,19 @@ def add_common_fetch_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--no-semantic",
         action="store_true",
-        help="关闭语义打标与标签展示。",
+        help="关闭语义打标、标签展示和过滤。",
     )
     parser.add_argument(
         "--no-filter",
         action="store_true",
-        help="关闭标签过滤链路，不做额外抓取或分类。",
+        help="关闭标签过滤链路；不会为了过滤额外抓取或分类。",
     )
     parser.add_argument(
         "--exclude-label",
         action="append",
         choices=list_content_labels(),
         default=None,
-        help="追加需要过滤掉的语义标签；默认过滤 soft。",
+        help="追加需要过滤掉的语义标签；不传时仅 us-hot/china-hot 默认过滤 soft。",
     )
     parser.add_argument(
         "--semantic-model-dir",
@@ -74,7 +138,7 @@ def add_common_fetch_args(parser: argparse.ArgumentParser) -> None:
         "--filter-mode",
         choices=list_filter_backends(),
         default="tfidf",
-        help="标签/过滤模式，支持 model 或 tfidf。",
+        help="标签/过滤模式；tfidf 为默认轻量模式，model 需要先下载模型。",
     )
 
 
@@ -100,19 +164,19 @@ def add_search_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--no-semantic",
         action="store_true",
-        help="关闭语义打标与标签展示。",
+        help="关闭语义打标、标签展示和过滤。",
     )
     parser.add_argument(
         "--no-filter",
         action="store_true",
-        help="关闭标签过滤链路，不做额外抓取或分类。",
+        help="关闭标签过滤链路；不会为了过滤额外抓取或分类。",
     )
     parser.add_argument(
         "--exclude-label",
         action="append",
         choices=list_content_labels(),
         default=None,
-        help="追加需要过滤掉的语义标签；默认过滤 soft。",
+        help="追加需要过滤掉的语义标签；search 默认不启用过滤，传入后才会分类拦截。",
     )
     parser.add_argument(
         "--semantic-model-dir",
@@ -123,20 +187,29 @@ def add_search_args(parser: argparse.ArgumentParser) -> None:
         "--filter-mode",
         choices=list_filter_backends(),
         default="tfidf",
-        help="标签/过滤模式，支持 model 或 tfidf。",
+        help="标签/过滤模式；tfidf 为默认轻量模式，model 需要先下载模型。",
     )
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="daily-cli",
-        description="快速检索每日美国/中国热点、AI 趋势、金融热点的命令行工具。",
+        description=(
+            "快速检索每日美国/中国热点、AI 趋势、金融热点和 GitHub Trending 的命令行工具。"
+        ),
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog=_top_level_help_epilog(),
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
 
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers = parser.add_subparsers(dest="command", required=True, title="commands")
 
-    presets_parser = subparsers.add_parser("presets", help="查看支持的预设。")
+    presets_parser = subparsers.add_parser(
+        "presets",
+        help="查看支持的预设。",
+        description="列出所有预设、默认来源、默认 limit 和默认过滤标签。",
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
     presets_parser.add_argument(
         "--format",
         choices=("text", "json"),
@@ -144,9 +217,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="输出格式。",
     )
 
-    model_parser = subparsers.add_parser("model", help="下载或查看语义过滤所需模型。")
+    model_parser = subparsers.add_parser(
+        "model",
+        help="下载或查看语义过滤所需模型。",
+        description="管理 model 过滤模式所需的语义模型文件。",
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
     model_subparsers = model_parser.add_subparsers(dest="model_command", required=True)
-    model_download_parser = model_subparsers.add_parser("download", help="提前下载语义过滤模型文件。")
+    model_download_parser = model_subparsers.add_parser(
+        "download",
+        help="提前下载语义过滤模型文件。",
+        description=(
+            f"下载 model 模式使用的语义模型。\n当前模型: {MODEL_REPO_ID}\n"
+            "如果你只使用 --filter-mode tfidf，可以不下载。"
+        ),
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
     model_download_parser.add_argument(
         "--model-dir",
         default=None,
@@ -158,10 +244,37 @@ def build_parser() -> argparse.ArgumentParser:
         help="强制重新下载模型文件。",
     )
 
-    summary_parser = subparsers.add_parser("summary", help="输出默认五类每日摘要。")
+    summary_parser = subparsers.add_parser(
+        "summary",
+        help="输出默认五类每日摘要。",
+        description=dedent(
+            """\
+            输出默认五类摘要:
+              us-hot, china-hot, ai, finance, github
+
+            默认仅 us-hot / china-hot 会触发 soft 过滤。
+            us-hot 过滤后不足时，会用 Google News Top Stories 回补。
+            """
+        ),
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
     add_common_fetch_args(summary_parser)
 
-    fetch_parser = subparsers.add_parser("fetch", help="获取一个或多个预设分组。")
+    fetch_parser = subparsers.add_parser(
+        "fetch",
+        help="获取一个或多个预设分组。",
+        description=dedent(
+            f"""\
+            获取一个或多个预设分组。
+
+            可选预设:
+              {_preset_summary()}
+
+            默认仅 us-hot / china-hot 会触发 soft 过滤。
+            """
+        ),
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
     fetch_parser.add_argument(
         "presets",
         nargs="+",
@@ -170,7 +283,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     add_common_fetch_args(fetch_parser)
 
-    search_parser = subparsers.add_parser("search", help="按关键词查询最新相关信息。")
+    search_parser = subparsers.add_parser(
+        "search",
+        help="按关键词查询最新相关信息。",
+        description=dedent(
+            """\
+            按关键词通过 Google News 查询最新相关信息。
+
+            search 默认只做检索，不自动分类过滤；
+            当你显式传入 --exclude-label 时，才会启动标签过滤。
+            """
+        ),
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
     search_parser.add_argument("query", help="要查询的关键词。")
     add_search_args(search_parser)
     search_parser.add_argument(

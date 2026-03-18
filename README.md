@@ -4,7 +4,7 @@
 
 - 美国热门事件
 - 中国热门事件
-- AI 发展趋势
+- AI发展
 - 金融热门事件
 - GitHub Trending
 - 额外附带一个 `us-market` 预设，方便快速查看美股焦点
@@ -66,7 +66,7 @@ daily-cli fetch us-market --source all --limit 8
 
 - `us-hot`: 美国热门事件
 - `china-hot`: 中国热门事件
-- `ai`: AI 发展趋势
+- `ai`: AI发展
 - `finance`: 金融热门事件
 - `github`: GitHub Trending
 - `us-market`: 美股焦点
@@ -144,6 +144,7 @@ daily-cli search "人工智能"
 ## 设计说明
 
 - `us-hot` 默认使用 Google Trends RSS，因为它更适合美国热门事件。
+- 当 `us-hot` 开启 `soft` 过滤且 Google Trends 保留下来的条目不足时，会按需用 Google News Top Stories 回补。
 - `china-hot` 默认使用百度热榜结构化数据。
 - `ai` / `finance` 默认聚合 Google News RSS 与百度热榜过滤结果。
 - `github` 使用 GitHub Trending 页面抓取热门项目、语言、Stars、Forks 和今日新增 Stars。

@@ -17,7 +17,7 @@
 
 - 美国热门事件
 - 中国热门事件
-- AI 发展趋势
+- AI发展
 - 金融热门事件
 - GitHub Trending
 - 美股焦点
@@ -46,9 +46,9 @@
 
 | 预设 | 中文名称 | 默认来源 | 说明 |
 | --- | --- | --- | --- |
-| `us-hot` | 美国热门事件 | `google` | 依赖 Google Trends US 日趋势 |
+| `us-hot` | 美国热门事件 | `google` | 依赖 Google Trends US 日趋势，过滤后不足时按需回补 Google News Top Stories |
 | `china-hot` | 中国热门事件 | `baidu` | 依赖百度热榜实时榜 |
-| `ai` | AI 发展趋势 | `google + baidu` | Google News AI 查询 + 百度热榜关键词过滤 |
+| `ai` | AI发展 | `google + baidu` | Google News AI 查询 + 百度热榜关键词过滤 |
 | `finance` | 金融热门事件 | `google + baidu` | Google News 金融查询 + 百度热榜关键词过滤 |
 | `github` | GitHub Trending | `github` | GitHub Trending 热门仓库列表 |
 | `us-market` | 美股焦点 | `google + baidu` | Google News 美股查询 + 百度热榜关键词过滤 |
@@ -81,8 +81,9 @@ https://trends.google.com/trending/rss?geo=US
 
 说明：
 
-- 这是“美国热门事件”的唯一来源。
-- 排序完全依赖 Google Trends RSS 原始顺序。
+- `us-hot` 的主来源是 Google Trends RSS。
+- 当默认 `soft` 过滤开启且剩余条目不足时，会额外拉取 Google News Top Stories 进行回补。
+- Google Trends 原始条目仍优先展示，回补条目只在数量不足时追加到后面。
 
 #### B. Google News RSS Search
 
@@ -184,13 +185,14 @@ https://github.com/trending
 
 判断方式：
 
-- 不做本地分类
-- 直接以 Google Trends US 返回的热门趋势为准
+- 主体由 Google Trends US 返回的热门趋势决定
+- 当默认 `soft` 过滤后数量不足时，会补充少量 Google News Top Stories
 
 结论：
 
 - `us-hot` 是“来源定义型类别”
-- 不是靠关键词或语义模型分类出来的
+- 不是靠关键词检索定义出来的
+- 但在过滤场景里，存在“Google Trends 主源 + Google News 回补”的补量逻辑
 
 ## 4.2 `china-hot`
 
@@ -342,6 +344,11 @@ Google 侧：
 - Google News：按 RSS 原顺序
 - GitHub Trending：按页面原始顺序
 - 百度热榜：按热榜原顺序
+
+`us-hot` 在开启过滤时有一个例外：
+
+- 先保留 Google Trends 中未被过滤的条目
+- 如果还不够 `limit`，再按 Google News Top Stories 的原始顺序追加回补条目
 
 ## 5.2 百度专题混合时
 
