@@ -3,8 +3,8 @@ from __future__ import annotations
 import unittest
 
 from daily_cli.sources import (
+    filter_items_by_keywords,
     parse_baidu_realtime_html,
-    parse_baidu_sugrec_json,
     parse_google_news_rss,
     parse_google_trends_rss,
 )
@@ -49,23 +49,6 @@ BAIDU_REALTIME_SAMPLE = """
 </html>
 """
 
-BAIDU_SUGREC_SAMPLE = {
-    "q": "人工智能",
-    "g": [
-        {
-            "type": "direct_new",
-            "q": "人工智能加速融入千行百业",
-            "info": {
-                "vec_str_raw": [
-                    '{"value":{"query":"人工智能加速融入千行百业","tag_style":{"text":"新"}}}'
-                ]
-            },
-        },
-        {"type": "sug", "q": "人工智能训练师"},
-    ],
-}
-
-
 class SourceParserTests(unittest.TestCase):
     def test_parse_google_trends_rss(self) -> None:
         items = parse_google_trends_rss(GOOGLE_TRENDS_SAMPLE, limit=3, category="us-hot")
@@ -89,12 +72,17 @@ class SourceParserTests(unittest.TestCase):
         self.assertEqual(items[0].hot_score, "123456")
         self.assertIn("置顶", items[0].tags)
 
-    def test_parse_baidu_sugrec_json(self) -> None:
-        items = parse_baidu_sugrec_json(BAIDU_SUGREC_SAMPLE, limit=5, category="ai", query="人工智能")
-        self.assertEqual(len(items), 2)
+    def test_filter_items_by_keywords(self) -> None:
+        hot_items = parse_baidu_realtime_html(BAIDU_REALTIME_SAMPLE, limit=5, category="china-hot")
+        items = filter_items_by_keywords(
+            hot_items,
+            keywords=("人工智能", "AI"),
+            limit=5,
+            category="ai",
+        )
+        self.assertEqual(len(items), 1)
         self.assertEqual(items[0].title, "人工智能加速融入千行百业")
-        self.assertIn("新", items[0].tags)
-        self.assertEqual(items[1].title, "人工智能训练师")
+        self.assertEqual(items[0].category, "ai")
 
 
 if __name__ == "__main__":

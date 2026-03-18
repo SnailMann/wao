@@ -8,7 +8,7 @@ from email.utils import parsedate_to_datetime
 from html import unescape
 from typing import Iterable
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote_plus, urlencode
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 import xml.etree.ElementTree as ET
 
@@ -276,91 +276,6 @@ def parse_baidu_realtime_html(html_text: str, limit: int, category: str) -> list
 def fetch_baidu_realtime(limit: int, timeout: float, category: str = "china-hot") -> list[NewsItem]:
     html_text = fetch_text("https://top.baidu.com/board", params={"tab": "realtime"}, timeout=timeout)
     return parse_baidu_realtime_html(html_text, limit=limit, category=category)
-
-
-def build_baidu_search_link(query: str) -> str:
-    return f"https://www.baidu.com/s?wd={quote_plus(query)}"
-
-
-def _parse_baidu_vec_raw(entry: dict) -> tuple[str, list[str]]:
-    info = entry.get("info", {})
-    raw_values = info.get("vec_str_raw") or []
-    if not raw_values:
-        return "", []
-
-    try:
-        parsed = json.loads(raw_values[0])
-    except json.JSONDecodeError:
-        return "", []
-
-    tag_text = str(parsed.get("value", {}).get("tag_style", {}).get("text") or "").strip()
-    summary = str(parsed.get("value", {}).get("query") or "").strip()
-    tags = [tag_text] if tag_text else []
-    return summary, tags
-
-
-def parse_baidu_sugrec_json(
-    payload: dict,
-    limit: int,
-    category: str,
-    query: str,
-    include_suggestions: bool = True,
-) -> list[NewsItem]:
-    entries = payload.get("g", [])
-    if not isinstance(entries, list):
-        raise FetchError("Baidu suggestion API returned an unexpected payload")
-
-    direct_news: list[NewsItem] = []
-    suggestions: list[NewsItem] = []
-
-    for entry in entries:
-        title = str(entry.get("q") or "").strip()
-        if not title or normalize_title(title) == normalize_title(query):
-            continue
-
-        summary, tags = _parse_baidu_vec_raw(entry)
-        item = NewsItem(
-            title=title,
-            category=category,
-            provider="baidu",
-            feed="Baidu Sugrec",
-            publisher="百度联想",
-            summary=summary if summary != title else "",
-            link=build_baidu_search_link(title),
-            search_query=query,
-            tags=tags,
-        )
-
-        if entry.get("type") == "direct_new":
-            direct_news.append(item)
-        else:
-            suggestions.append(item)
-
-    combined = direct_news + (suggestions if include_suggestions else [])
-    for rank, item in enumerate(combined, start=1):
-        item.rank = rank
-    return combined[:limit]
-
-
-def fetch_baidu_suggestions(
-    query: str,
-    limit: int,
-    timeout: float,
-    category: str,
-    include_suggestions: bool = True,
-) -> list[NewsItem]:
-    payload = fetch_json(
-        "https://www.baidu.com/sugrec",
-        params={"prod": "pc", "wd": query},
-        timeout=timeout,
-    )
-    return parse_baidu_sugrec_json(
-        payload,
-        limit=limit,
-        category=category,
-        query=query,
-        include_suggestions=include_suggestions,
-    )
 
 
 def filter_items_by_keywords(

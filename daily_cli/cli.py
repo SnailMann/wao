@@ -49,6 +49,27 @@ def add_common_fetch_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def add_search_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--limit",
+        type=positive_int,
+        default=5,
+        help="最多返回多少条结果。",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=positive_float,
+        default=10.0,
+        help="Google News 接口超时时间（秒）。",
+    )
+    parser.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="输出格式。",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="daily-cli",
@@ -80,7 +101,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     search_parser = subparsers.add_parser("search", help="按关键词查询最新相关信息。")
     search_parser.add_argument("query", help="要查询的关键词。")
-    add_common_fetch_args(search_parser)
+    add_search_args(search_parser)
     search_parser.add_argument(
         "--google-locale",
         choices=("auto", "us", "cn"),
@@ -143,7 +164,6 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "search":
             section = collect_search(
                 query=args.query,
-                source=args.source,
                 limit=args.limit,
                 timeout=args.timeout,
                 google_locale=args.google_locale,

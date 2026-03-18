@@ -12,7 +12,7 @@
 
 - 改成可安装的 Python 包，支持 `pip install .`
 - Google 侧使用当前可用的 Trends RSS / Google News RSS
-- Baidu 侧使用百度热榜结构化数据 + Baidu `sugrec` 联想热点接口
+- Baidu 侧使用百度热榜结构化数据与关键词过滤
 - 提供多命令、多预设、多输出格式
 - 尽量只依赖标准库，安装更轻
 
@@ -65,7 +65,7 @@ daily-cli fetch us-market --source all --limit 8
 
 ```bash
 daily-cli search OpenAI
-daily-cli search 人工智能 --source all --google-locale cn
+daily-cli search 人工智能 --google-locale cn
 daily-cli search 美股 --format json
 ```
 
@@ -103,15 +103,15 @@ daily-cli presets
 daily-cli summary --limit 5
 daily-cli fetch ai finance --source all
 daily-cli fetch china-hot --format json
-daily-cli search "Federal Reserve" --source google --google-locale us
-daily-cli search "人工智能" --source baidu
+daily-cli search "Federal Reserve" --google-locale us
+daily-cli search "人工智能"
 ```
 
 ## 设计说明
 
 - `us-hot` 默认使用 Google Trends RSS，因为它更适合美国热门事件。
 - `china-hot` 默认使用百度热榜结构化数据。
-- `ai` / `finance` 默认聚合 Google News RSS 与 Baidu 联想热点、热榜过滤结果。
+- `ai` / `finance` 默认聚合 Google News RSS 与百度热榜过滤结果。
 - Baidu 普通网页搜索较容易触发验证码，因此没有把它作为核心依赖接口。
 
 更详细的类别、来源、排序和降级逻辑说明见：

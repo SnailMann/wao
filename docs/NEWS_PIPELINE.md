@@ -37,10 +37,10 @@
 | --- | --- | --- | --- |
 | `us-hot` | 美国热门事件 | `google` | 依赖 Google Trends US 日趋势 |
 | `china-hot` | 中国热门事件 | `baidu` | 依赖百度热榜实时榜 |
-| `ai` | AI 发展趋势 | `google + baidu` | Google News AI 查询 + 百度联想热点/热榜过滤 |
-| `finance` | 金融热门事件 | `google + baidu` | Google News 金融查询 + 百度联想热点/热榜过滤 |
-| `us-market` | 美股焦点 | `google + baidu` | Google News 美股查询 + 百度联想热点/热榜过滤 |
-| `search` | 自定义查询 | `google + baidu` | 按用户输入关键词动态查询 |
+| `ai` | AI 发展趋势 | `google + baidu` | Google News AI 查询 + 百度热榜关键词过滤 |
+| `finance` | 金融热门事件 | `google + baidu` | Google News 金融查询 + 百度热榜关键词过滤 |
+| `us-market` | 美股焦点 | `google + baidu` | Google News 美股查询 + 百度热榜关键词过滤 |
+| `search` | 自定义查询 | `google` | 按用户输入关键词通过 Google News 查询 |
 
 ## 3. 数据源清单
 
@@ -129,35 +129,6 @@ https://top.baidu.com/board?tab=realtime
 - `isTop`
 - `hotChange`
 
-#### B. Baidu Sugrec 联想接口
-
-用途：
-
-- `ai`
-- `finance`
-- `us-market`
-- `search`
-
-当前使用的接口：
-
-```text
-https://www.baidu.com/sugrec?prod=pc&wd=...
-```
-
-关键字段：
-
-- `g[].type`
-  - `direct_new`: 更像新闻/热点类联想
-  - `sug`: 普通联想词
-- `g[].q`: 联想词文本
-- `g[].info.vec_str_raw`
-  - 其中可能包含 `新`、`热` 这类标签
-
-说明：
-
-- 当前实现优先使用 `direct_new`。
-- 如果结果仍不足，再回退补普通 `sug` 联想。
-
 ### 3.3 没有采用的来源
 
 当前没有把百度普通网页搜索结果页作为核心来源，原因是：
@@ -202,11 +173,7 @@ https://www.baidu.com/sugrec?prod=pc&wd=...
 
 ### Baidu 侧
 
-Baidu 侧不是语义模型判断，而是组合判断：
-
-1. 先查 `wd=人工智能` 的 `sugrec`
-2. 优先取 `direct_new`
-3. 再从百度热榜实时榜里做关键词过滤
+Baidu 侧不是语义模型判断，而是直接用百度热榜实时榜做关键词过滤。
 
 AI 关键词目前包括：
 
@@ -237,9 +204,8 @@ nvidia
 
 Baidu 侧采用规则过滤，不是语义分类：
 
-1. 查询 `wd=金融` 的 `sugrec`
-2. 优先取 `direct_new`
-3. 再从百度热榜里筛选出命中金融关键词的条目
+1. 抓取百度热榜实时榜
+2. 再从百度热榜里筛选出命中金融关键词的条目
 
 金融关键词目前包括：
 
@@ -303,16 +269,11 @@ s&p
 
 ## 4.6 `search`
 
-`search` 是动态类别，不预设固定主题。
+`search` 是动态类别，不预设固定主题，且当前只通过 Google 查询。
 
 Google 侧：
 
 - 直接用用户输入的查询词做 Google News RSS Search
-
-Baidu 侧：
-
-- 先查同一查询词的 `sugrec`
-- 再用这个查询词本身去百度热榜做关键词匹配
 
 额外逻辑：
 
@@ -330,17 +291,15 @@ Baidu 侧：
 - Google Trends：按 RSS 原顺序
 - Google News：按 RSS 原顺序
 - 百度热榜：按热榜原顺序
-- Baidu Sugrec：按接口返回顺序，且 `direct_new` 会排在普通 `sug` 前面
 
 ## 5.2 百度专题混合时
 
-对于 `ai` / `finance` / `us-market` / `search` 的 Baidu 侧，排序是分层合成的：
+对于 `ai` / `finance` / `us-market` 的 Baidu 侧，排序规则是：
 
-1. `direct_new`
-2. 百度热榜关键词过滤结果
-3. 如果结果不够，再补普通 `sug`
+1. 先从百度热榜中过滤出命中关键词的条目
+2. 再按命中分数和原始热榜顺序排序
 
-其中“百度热榜关键词过滤结果”的内部排序规则是：
+其中内部排序规则是：
 
 1. 先按关键词命中数量从高到低排序
 2. 分数相同则按原始热榜排名排序
@@ -379,18 +338,13 @@ Baidu 侧：
 
 ## 7. 降级与补全策略
 
-## 7.1 Baidu 专题降级
+## 7.1 Baidu 专题筛选
 
-对于 `ai` / `finance` / `us-market` / `search`：
+对于 `ai` / `finance` / `us-market`：
 
-1. 先取 `sugrec` 里的 `direct_new`
-2. 再补百度热榜关键词命中结果
-3. 如果还不够，再补普通 `sug`
-
-这样设计的原因：
-
-- 优先拿“更像热点”的结果
-- 同时避免接口结果过少时输出为空
+1. 抓取百度热榜实时榜
+2. 对标题和摘要做关键词匹配
+3. 输出命中的热榜条目
 
 ## 7.2 上游失败处理
 
@@ -422,7 +376,7 @@ Baidu 侧：
 | `rank` | 在来源中的顺位 |
 | `hot_score` | 百度热榜热度值 |
 | `approx_traffic` | Google Trends 的近似热度 |
-| `search_query` | 该条记录关联的查询词，主要用于 Baidu Sugrec |
+| `search_query` | 保留字段，当前默认不使用 |
 | `tags` | 附加标签，如 `新`、`热`、`置顶` |
 
 ## 9. `--source` 参数的真实语义
@@ -484,7 +438,7 @@ Baidu 侧：
 
 1. 引入 embedding 作为二级语义过滤器
 2. 对 `finance` / `ai` 加更细的白名单和黑名单
-3. 给 `search` 增加来源权重配置
+3. 给 `search` 增加导出与缓存能力
 4. 增加导出 Markdown / JSON 文件能力
 5. 增加定时任务输出日报
 
