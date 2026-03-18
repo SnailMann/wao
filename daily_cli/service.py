@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 from .models import NewsItem, SectionResult
@@ -87,6 +88,13 @@ class PresetSpec:
     default_sources: tuple[str, ...]
     default_limit: int
     default_excluded_labels: tuple[str, ...]
+
+
+@dataclass
+class PreparedSection:
+    spec: PresetSpec
+    final_limit: int
+    section: SectionResult
 
 
 PRESET_SPECS = {
@@ -264,24 +272,114 @@ def _candidate_limit(final_limit: int, semantic_filter: bool) -> int:
     return max(final_limit * 3, final_limit + 8)
 
 
-def _apply_semantic_controls(
+def _fetch_provider_items(provider: str, key: str, limit: int, timeout: float) -> list[NewsItem]:
+    if provider == "google":
+        return _google_items_for_preset(key, limit=limit, timeout=timeout)
+    if provider == "baidu":
+        return _baidu_items_for_preset(key, limit=limit, timeout=timeout)
+    if provider == "github":
+        return _github_items_for_preset(key, limit=limit, timeout=timeout)
+    raise ValueError(f"Unsupported provider: {provider}")
+
+
+def _collect_provider_groups(
+    key: str,
+    resolved_sources: list[str],
+    fetch_limit: int,
+    timeout: float,
+) -> tuple[list[list[NewsItem]], list[str]]:
+    item_groups: list[list[NewsItem]] = []
+    warnings: list[str] = []
+
+    if len(resolved_sources) <= 1:
+        for provider in resolved_sources:
+            try:
+                item_groups.append(_fetch_provider_items(provider, key=key, limit=fetch_limit, timeout=timeout))
+            except FetchError as exc:
+                warnings.append(f"{provider} 获取失败: {exc}")
+        return item_groups, warnings
+
+    with ThreadPoolExecutor(max_workers=min(4, len(resolved_sources))) as executor:
+        futures = {
+            provider: executor.submit(_fetch_provider_items, provider, key, fetch_limit, timeout)
+            for provider in resolved_sources
+        }
+        for provider in resolved_sources:
+            try:
+                item_groups.append(futures[provider].result())
+            except FetchError as exc:
+                warnings.append(f"{provider} 获取失败: {exc}")
+
+    return item_groups, warnings
+
+
+def _prepare_section(
+    key: str,
+    source: str,
+    limit: int | None,
+    timeout: float,
+    semantic_enabled: bool,
+    semantic_filter: bool,
+) -> PreparedSection:
+    if key not in PRESET_SPECS:
+        raise ValueError(f"Unknown preset: {key}")
+
+    spec = PRESET_SPECS[key]
+    final_limit = spec.default_limit if limit is None else limit
+    fetch_limit = _candidate_limit(final_limit, semantic_filter and semantic_enabled)
+    resolved_sources = list(resolve_sources(spec, source))
+    section = SectionResult(
+        key=spec.key,
+        label=spec.label,
+        requested_source=source,
+        resolved_sources=resolved_sources,
+        generated_at=local_now_string(),
+    )
+
+    item_groups, warnings = _collect_provider_groups(spec.key, resolved_sources, fetch_limit, timeout)
+    section.warnings.extend(warnings)
+
+    if len(item_groups) <= 1:
+        section.items = dedupe_items(item_groups[0] if item_groups else [], limit=fetch_limit)
+    else:
+        section.items = _merge_item_groups(item_groups, limit=fetch_limit)
+
+    if spec.key == "github" and section.items and len(section.items) < final_limit:
+        section.warnings.append(
+            f"GitHub Trending 当前只解析到 {len(section.items)} 条结果，少于目标 {final_limit} 条。"
+        )
+
+    return PreparedSection(spec=spec, final_limit=final_limit, section=section)
+
+
+def _annotate_prepared_sections(prepared_sections: list[PreparedSection], semantic_model_dir: str | None) -> None:
+    all_items = [item for prepared in prepared_sections for item in prepared.section.items]
+    if not all_items:
+        return
+
+    labeler = get_semantic_labeler(semantic_model_dir)
+    labeler.annotate_items(all_items)
+
+
+def _finalize_section(
+    prepared: PreparedSection,
     section: SectionResult,
-    default_excluded_labels: tuple[str, ...],
-    final_limit: int,
     semantic_enabled: bool,
     semantic_filter: bool,
     excluded_labels: tuple[str, ...] | None,
-    semantic_model_dir: str | None,
 ) -> SectionResult:
+    default_excluded_labels = prepared.spec.default_excluded_labels
+    final_limit = prepared.final_limit
+
     if not semantic_enabled:
         if len(section.items) > final_limit:
             section.items = section.items[:final_limit]
+        if not section.items and not section.warnings:
+            section.warnings.append("没有获取到结果。")
         return section
 
-    labeler = get_semantic_labeler(semantic_model_dir)
     section.semantic_enabled = True
     section.semantic_model = MODEL_REPO_ID
-    section.items = labeler.annotate_items(section.items)
 
     if semantic_filter:
         blocked = excluded_labels if excluded_labels else default_excluded_labels
@@ -304,7 +402,64 @@ def _apply_semantic_controls(
 
     if len(section.items) > final_limit:
         section.items = section.items[:final_limit]
+    if not section.items and not section.warnings:
+        section.warnings.append("没有获取到结果。")
     return section
+
+
+def collect_presets(
+    keys: list[str] | tuple[str, ...],
+    source: str,
+    limit: int | None,
+    timeout: float,
+    semantic_enabled: bool = True,
+    semantic_filter: bool = True,
+    excluded_labels: tuple[str, ...] | None = None,
+    semantic_model_dir: str | None = None,
+) -> list[SectionResult]:
+    if not keys:
+        return []
+
+    if len(keys) == 1:
+        prepared_sections = [
+            _prepare_section(
+                keys[0],
+                source=source,
+                limit=limit,
+                timeout=timeout,
+                semantic_enabled=semantic_enabled,
+                semantic_filter=semantic_filter,
+            )
+        ]
+    else:
+        with ThreadPoolExecutor(max_workers=min(8, len(keys))) as executor:
+            futures = [
+                executor.submit(
+                    _prepare_section,
+                    key,
+                    source,
+                    limit,
+                    timeout,
+                    semantic_enabled,
+                    semantic_filter,
+                )
+                for key in keys
+            ]
+            prepared_sections = [future.result() for future in futures]
+
+    if semantic_enabled:
+        _annotate_prepared_sections(prepared_sections, semantic_model_dir=semantic_model_dir)
+
+    return [
+        _finalize_section(
+            prepared,
+            prepared.section,
+            semantic_enabled=semantic_enabled,
+            semantic_filter=semantic_filter,
+            excluded_labels=excluded_labels,
+        )
+        for prepared in prepared_sections
+    ]
 
 
 def collect_preset(
@@ -317,56 +472,16 @@ def collect_preset(
     excluded_labels: tuple[str, ...] | None = None,
     semantic_model_dir: str | None = None,
 ) -> SectionResult:
-    if key not in PRESET_SPECS:
-        raise ValueError(f"Unknown preset: {key}")
-
-    spec = PRESET_SPECS[key]
-    effective_limit = spec.default_limit if limit is None else limit
-    fetch_limit = _candidate_limit(effective_limit, semantic_filter and semantic_enabled)
-    resolved_sources = list(resolve_sources(spec, source))
-    section = SectionResult(
-        key=spec.key,
-        label=spec.label,
-        requested_source=source,
-        resolved_sources=resolved_sources,
-        generated_at=local_now_string(),
-    )
-
-    item_groups: list[list[NewsItem]] = []
-    for provider in resolved_sources:
-        try:
-            if provider == "google":
-                item_groups.append(_google_items_for_preset(spec.key, limit=fetch_limit, timeout=timeout))
-            elif provider == "baidu":
-                item_groups.append(_baidu_items_for_preset(spec.key, limit=fetch_limit, timeout=timeout))
-            elif provider == "github":
-                item_groups.append(_github_items_for_preset(spec.key, limit=fetch_limit, timeout=timeout))
-        except FetchError as exc:
-            section.warnings.append(f"{provider} 获取失败: {exc}")
-
-    if len(item_groups) <= 1:
-        section.items = dedupe_items(item_groups[0] if item_groups else [], limit=fetch_limit)
-    else:
-        section.items = _merge_item_groups(item_groups, limit=fetch_limit)
-
-    if spec.key == "github" and not semantic_filter and section.items and len(section.items) < effective_limit:
-        section.warnings.append(
-            f"GitHub Trending 当前只解析到 {len(section.items)} 条结果，少于目标 {effective_limit} 条。"
-        )
-
-    section = _apply_semantic_controls(
-        section,
-        default_excluded_labels=spec.default_excluded_labels,
-        final_limit=effective_limit,
+    return collect_presets(
+        [key],
+        source=source,
+        limit=limit,
+        timeout=timeout,
         semantic_enabled=semantic_enabled,
         semantic_filter=semantic_filter,
         excluded_labels=excluded_labels,
         semantic_model_dir=semantic_model_dir,
-    )
-
-    if not section.items and not section.warnings:
-        section.warnings.append("没有获取到结果。")
-    return section
+    )[0]
 
 
 def collect_summary(
@@ -378,19 +493,16 @@ def collect_summary(
     excluded_labels: tuple[str, ...] | None = None,
     semantic_model_dir: str | None = None,
 ) -> list[SectionResult]:
-    return [
-        collect_preset(
-            key,
-            source=source,
-            limit=limit,
-            timeout=timeout,
-            semantic_enabled=semantic_enabled,
-            semantic_filter=semantic_filter,
-            excluded_labels=excluded_labels,
-            semantic_model_dir=semantic_model_dir,
-        )
-        for key in DEFAULT_SUMMARY_PRESETS
-    ]
+    return collect_presets(
+        list(DEFAULT_SUMMARY_PRESETS),
+        source=source,
+        limit=limit,
+        timeout=timeout,
+        semantic_enabled=semantic_enabled,
+        semantic_filter=semantic_filter,
+        excluded_labels=excluded_labels,
+        semantic_model_dir=semantic_model_dir,
+    )
 
 
 def collect_search(
@@ -429,16 +541,27 @@ def collect_search(
     except FetchError as exc:
         section.warnings.append(f"google 获取失败: {exc}")
 
-    section = _apply_semantic_controls(
-        section,
-        default_excluded_labels=DEFAULT_EXCLUDED_LABELS,
+    prepared = PreparedSection(
+        spec=PresetSpec(
+            key="search",
+            label="search",
+            description="按用户查询进行 Google News 检索。",
+            supported_sources=("google",),
+            default_sources=("google",),
+            default_limit=limit,
+            default_excluded_labels=DEFAULT_EXCLUDED_LABELS,
+        ),
         final_limit=limit,
+        section=section,
+    )
+
+    if semantic_enabled:
+        _annotate_prepared_sections([prepared], semantic_model_dir=semantic_model_dir)
+
+    return _finalize_section(
+        prepared,
+        section,
         semantic_enabled=semantic_enabled,
         semantic_filter=semantic_filter,
         excluded_labels=excluded_labels,
-        semantic_model_dir=semantic_model_dir,
     )
-
-    if not section.items and not section.warnings:
-        section.warnings.append("没有获取到结果。")
-    return section

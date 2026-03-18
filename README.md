@@ -16,6 +16,7 @@
 - Baidu 侧使用百度热榜结构化数据与关键词过滤
 - 默认使用 `intfloat/multilingual-e5-small` 做语义打标
 - 默认过滤 `soft` 标签，尽量屏蔽低信息量内容
+- `summary` / 多 preset `fetch` 采用并行抓取 + 全局批量推理，减少重复模型开销
 - 提供多命令、多预设、多输出格式
 
 ## 安装

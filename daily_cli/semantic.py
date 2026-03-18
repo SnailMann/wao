@@ -238,27 +238,29 @@ class SemanticLabeler:
         embeddings = summed / counts
         return self._functional.normalize(embeddings, p=2, dim=1)
 
-    def annotate_items(self, items: list[object]) -> list[object]:
+    def annotate_items(self, items: list[object], batch_size: int = 32) -> list[object]:
         if not items:
             return items
 
-        texts: list[str] = []
-        for item in items:
-            parts = [getattr(item, "title", ""), getattr(item, "summary", ""), getattr(item, "publisher", "")]
-            text = "\n".join(part.strip() for part in parts if part and part.strip())
-            texts.append(text or getattr(item, "title", ""))
+        for start in range(0, len(items), batch_size):
+            batch_items = items[start : start + batch_size]
+            texts: list[str] = []
+            for item in batch_items:
+                parts = [getattr(item, "title", ""), getattr(item, "summary", ""), getattr(item, "publisher", "")]
+                text = "\n".join(part.strip() for part in parts if part and part.strip())
+                texts.append(text or getattr(item, "title", ""))
 
-        query_embeddings = self._encode(texts, prefix="query")
-        scores = query_embeddings @ self._label_embeddings.T
+            query_embeddings = self._encode(texts, prefix="query")
+            scores = query_embeddings @ self._label_embeddings.T
 
-        for index, item in enumerate(items):
-            row = scores[index]
-            best_index = int(row.argmax().item())
-            best_score = float(row[best_index].item())
-            spec = self._label_specs[best_index]
-            item.content_label = spec.key
-            item.content_label_name = spec.label
-            item.content_label_score = best_score
+            for index, item in enumerate(batch_items):
+                row = scores[index]
+                best_index = int(row.argmax().item())
+                best_score = float(row[best_index].item())
+                spec = self._label_specs[best_index]
+                item.content_label = spec.key
+                item.content_label_name = spec.label
+                item.content_label_score = best_score
 
         return items
 

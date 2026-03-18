@@ -6,7 +6,7 @@ import json
 from . import __version__
 from .output import render_json, render_text
 from .semantic import MODEL_REPO_ID, SemanticError, download_model, list_content_labels
-from .service import collect_preset, collect_search, collect_summary, list_presets
+from .service import collect_presets, collect_search, collect_summary, list_presets
 
 
 def positive_int(value: str) -> int:
@@ -233,19 +233,16 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "fetch":
-            sections = [
-                collect_preset(
-                    key,
-                    source=args.source,
-                    limit=args.limit,
-                    timeout=args.timeout,
-                    semantic_enabled=not args.no_semantic,
-                    semantic_filter=not args.no_semantic and not args.no_filter,
-                    excluded_labels=tuple(args.exclude_label) if args.exclude_label else None,
-                    semantic_model_dir=args.semantic_model_dir,
-                )
-                for key in args.presets
-            ]
+            sections = collect_presets(
+                args.presets,
+                source=args.source,
+                limit=args.limit,
+                timeout=args.timeout,
+                semantic_enabled=not args.no_semantic,
+                semantic_filter=not args.no_semantic and not args.no_filter,
+                excluded_labels=tuple(args.exclude_label) if args.exclude_label else None,
+                semantic_model_dir=args.semantic_model_dir,
+            )
             print(emit_output(args.format, sections), end="")
             return 0
 
