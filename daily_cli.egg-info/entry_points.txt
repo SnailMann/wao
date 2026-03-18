@@ -1,0 +1,2 @@
+[console_scripts]
+daily-cli = daily_cli.cli:main
