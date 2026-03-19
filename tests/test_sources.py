@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from daily_cli.sources import (
+from daily_cli.runtime.sources import (
     filter_items_by_keywords,
     parse_baidu_realtime_html,
     parse_github_trending_html,

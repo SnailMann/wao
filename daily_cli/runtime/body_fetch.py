@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from urllib.parse import urljoin, urlparse
 
-from .models import NewsItem
+from ..core.models import NewsItem
 
 BODY_RESOURCE_SKIP_TYPES = {"font", "image", "media"}
 DEFAULT_BODY_USER_AGENT = (
@@ -100,7 +100,7 @@ def _load_playwright():
         from playwright.sync_api import sync_playwright
     except ImportError as exc:
         raise BodyFetchError(
-            "正文抓取依赖未安装，请先执行 `python3 -m pip install .`。"
+            "正文抓取依赖未安装，请先执行 `python3 -m pip install .[body]`。"
         ) from exc
     return sync_playwright, PlaywrightError, PlaywrightTimeoutError
 

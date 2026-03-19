@@ -3,9 +3,9 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from daily_cli.models import NewsItem, SectionResult
-from daily_cli.semantic import TfidfLabeler
-from daily_cli.service import _finalize_section, collect_presets
+from daily_cli.core.models import NewsItem, SectionResult
+from daily_cli.core.pipeline import _finalize_topic_section, collect_topics
+from daily_cli.runtime.semantic import TfidfLabeler
 
 
 class StubLabeler:
@@ -57,9 +57,8 @@ def make_section(items: list[NewsItem]) -> SectionResult:
 
 
 class SemanticFilterTests(unittest.TestCase):
-    @patch("daily_cli.service.get_semantic_labeler")
-    def test_default_soft_filter_removes_low_signal_items(self, mocked_labeler) -> None:
-        mocked_labeler.return_value = StubLabeler()
+    def test_default_soft_filter_removes_low_signal_items(self) -> None:
+        labeler = StubLabeler()
         section = make_section(
             [
                 NewsItem(title="男子买车一年蹭饭260次还打包", category="china-hot", provider="baidu", feed="Baidu Hotboard"),
@@ -71,19 +70,20 @@ class SemanticFilterTests(unittest.TestCase):
             "Prepared",
             (),
             {
+                "spec": type("Spec", (), {"refill_plan": None})(),
                 "final_limit": 5,
                 "blocked_labels": ("soft",),
                 "filter_active": True,
             },
         )()
 
-        mocked_labeler.return_value.annotate_items(section.items)
-        result = _finalize_section(
+        labeler.annotate_items(section.items)
+        result = _finalize_topic_section(
             prepared,
             section,
             timeout=1.0,
             semantic_model_dir=None,
-            filter_mode="model",
+            filter_mode="tfidf",
         )
 
         self.assertTrue(result.semantic_enabled)
@@ -94,9 +94,8 @@ class SemanticFilterTests(unittest.TestCase):
         self.assertEqual(result.items[0].title, "美联储暗示年内或继续降息")
         self.assertEqual(result.items[0].content_label, "macro")
 
-    @patch("daily_cli.service.get_semantic_labeler")
-    def test_custom_excluded_labels_override_default_soft_filter(self, mocked_labeler) -> None:
-        mocked_labeler.return_value = StubLabeler()
+    def test_custom_excluded_labels_override_default_soft_filter(self) -> None:
+        labeler = StubLabeler()
         section = make_section(
             [
                 NewsItem(title="男子买车一年蹭饭260次还打包", category="china-hot", provider="baidu", feed="Baidu Hotboard"),
@@ -108,19 +107,20 @@ class SemanticFilterTests(unittest.TestCase):
             "Prepared",
             (),
             {
+                "spec": type("Spec", (), {"refill_plan": None})(),
                 "final_limit": 5,
                 "blocked_labels": ("public",),
                 "filter_active": True,
             },
         )()
 
-        mocked_labeler.return_value.annotate_items(section.items)
-        result = _finalize_section(
+        labeler.annotate_items(section.items)
+        result = _finalize_topic_section(
             prepared,
             section,
             timeout=1.0,
             semantic_model_dir=None,
-            filter_mode="model",
+            filter_mode="tfidf",
         )
 
         self.assertEqual(result.excluded_labels, ["public"])
@@ -128,28 +128,42 @@ class SemanticFilterTests(unittest.TestCase):
         self.assertEqual(len(result.items), 2)
         self.assertEqual(result.items[0].content_label, "soft")
 
-    @patch("daily_cli.service.fetch_baidu_realtime")
-    @patch("daily_cli.service.fetch_google_news_top")
-    @patch("daily_cli.service.fetch_google_trends_us")
-    @patch("daily_cli.service.get_semantic_labeler")
-    def test_collect_presets_uses_single_global_annotation_batch(
+    @patch("daily_cli.core.pipeline.fetch_source_plan")
+    @patch("daily_cli.core.pipeline.annotate_items")
+    def test_collect_topics_uses_single_global_annotation_batch(
         self,
-        mocked_labeler,
-        mocked_google_trends,
-        mocked_google_news_top,
-        mocked_baidu,
+        mocked_annotate,
+        mocked_fetch_source_plan,
     ) -> None:
         labeler = StubLabeler()
-        mocked_labeler.return_value = labeler
-        mocked_google_trends.return_value = [
-            NewsItem(title="Federal Reserve signals more cuts", category="us-hot", provider="google", feed="Google Trends")
-        ]
-        mocked_google_news_top.return_value = []
-        mocked_baidu.return_value = [
-            NewsItem(title="男子买车一年蹭饭260次还打包", category="china-hot", provider="baidu", feed="Baidu Hotboard")
-        ]
+        mocked_annotate.side_effect = lambda items, **kwargs: labeler.annotate_items(items)
 
-        sections = collect_presets(
+        def side_effect(plan, topic_key, limit, timeout):
+            if topic_key == "us-hot" and plan.mode == "trends_us":
+                return [
+                    NewsItem(
+                        title="Federal Reserve signals more cuts",
+                        category="us-hot",
+                        provider="google",
+                        feed="Google Trends",
+                    )
+                ]
+            if topic_key == "china-hot" and plan.mode == "hotboard":
+                return [
+                    NewsItem(
+                        title="男子买车一年蹭饭260次还打包",
+                        category="china-hot",
+                        provider="baidu",
+                        feed="Baidu Hotboard",
+                    )
+                ]
+            if topic_key == "us-hot" and plan.mode == "news_top":
+                return []
+            raise AssertionError(f"unexpected fetch: {topic_key} {plan.source}:{plan.mode}")
+
+        mocked_fetch_source_plan.side_effect = side_effect
+
+        sections = collect_topics(
             ["us-hot", "china-hot"],
             source="auto",
             limit=5,
@@ -164,20 +178,18 @@ class SemanticFilterTests(unittest.TestCase):
         self.assertEqual(len(sections[1].items), 0)
         self.assertEqual(sections[1].filtered_count, 1)
 
-    @patch("daily_cli.service.fetch_google_news_search")
-    @patch("daily_cli.service.get_semantic_labeler")
-    def test_ai_preset_does_not_trigger_semantic_by_default(
+    @patch("daily_cli.core.pipeline.fetch_source_plan")
+    @patch("daily_cli.core.pipeline.annotate_items")
+    def test_ai_topic_does_not_trigger_semantic_by_default(
         self,
-        mocked_labeler,
-        mocked_google_news,
+        mocked_annotate,
+        mocked_fetch_source_plan,
     ) -> None:
-        labeler = StubLabeler()
-        mocked_labeler.return_value = labeler
-        mocked_google_news.return_value = [
+        mocked_fetch_source_plan.return_value = [
             NewsItem(title="男子买车一年蹭饭260次还打包", category="ai", provider="google", feed="Google News")
         ]
 
-        section = collect_presets(
+        section = collect_topics(
             ["ai"],
             source="google",
             limit=5,
@@ -186,27 +198,25 @@ class SemanticFilterTests(unittest.TestCase):
             semantic_filter=True,
         )[0]
 
-        self.assertEqual(labeler.calls, [])
+        mocked_annotate.assert_not_called()
         self.assertFalse(section.semantic_enabled)
         self.assertFalse(section.filter_enabled)
         self.assertEqual(section.filtered_count, 0)
         self.assertEqual(len(section.items), 1)
         self.assertEqual(section.items[0].content_label, "")
 
-    @patch("daily_cli.service.fetch_github_trending")
-    @patch("daily_cli.service.get_semantic_labeler")
-    def test_github_preset_does_not_trigger_semantic_by_default(
+    @patch("daily_cli.core.pipeline.fetch_source_plan")
+    @patch("daily_cli.core.pipeline.annotate_items")
+    def test_github_topic_does_not_trigger_semantic_by_default(
         self,
-        mocked_labeler,
-        mocked_github,
+        mocked_annotate,
+        mocked_fetch_source_plan,
     ) -> None:
-        labeler = StubLabeler()
-        mocked_labeler.return_value = labeler
-        mocked_github.return_value = [
+        mocked_fetch_source_plan.return_value = [
             NewsItem(title="obra/superpowers", category="github", provider="github", feed="GitHub Trending")
         ]
 
-        section = collect_presets(
+        section = collect_topics(
             ["github"],
             source="github",
             limit=10,
@@ -215,26 +225,26 @@ class SemanticFilterTests(unittest.TestCase):
             semantic_filter=True,
         )[0]
 
-        self.assertEqual(labeler.calls, [])
+        mocked_annotate.assert_not_called()
         self.assertFalse(section.semantic_enabled)
         self.assertFalse(section.filter_enabled)
         self.assertEqual(len(section.items), 1)
         self.assertEqual(section.items[0].content_label, "")
 
-    @patch("daily_cli.service.fetch_github_trending")
-    @patch("daily_cli.service.get_semantic_labeler")
-    def test_github_preset_triggers_semantic_when_excluded_labels_are_provided(
+    @patch("daily_cli.core.pipeline.fetch_source_plan")
+    @patch("daily_cli.core.pipeline.annotate_items")
+    def test_github_topic_triggers_semantic_when_excluded_labels_are_provided(
         self,
-        mocked_labeler,
-        mocked_github,
+        mocked_annotate,
+        mocked_fetch_source_plan,
     ) -> None:
         labeler = StubLabeler()
-        mocked_labeler.return_value = labeler
-        mocked_github.return_value = [
+        mocked_annotate.side_effect = lambda items, **kwargs: labeler.annotate_items(items)
+        mocked_fetch_source_plan.return_value = [
             NewsItem(title="男子买车一年蹭饭260次还打包", category="github", provider="github", feed="GitHub Trending")
         ]
 
-        section = collect_presets(
+        section = collect_topics(
             ["github"],
             source="github",
             limit=10,
@@ -249,41 +259,46 @@ class SemanticFilterTests(unittest.TestCase):
         self.assertTrue(section.filter_enabled)
         self.assertEqual(section.filtered_count, 1)
 
-    @patch("daily_cli.service.fetch_google_news_top")
-    @patch("daily_cli.service.fetch_google_trends_us")
-    @patch("daily_cli.service.get_semantic_labeler")
+    @patch("daily_cli.core.pipeline.fetch_source_plan")
+    @patch("daily_cli.core.pipeline.annotate_items")
     def test_us_hot_refills_with_google_news_after_soft_filter(
         self,
-        mocked_labeler,
-        mocked_google_trends,
-        mocked_google_news_top,
+        mocked_annotate,
+        mocked_fetch_source_plan,
     ) -> None:
         labeler = UsHotRefillLabeler()
-        mocked_labeler.return_value = labeler
-        mocked_google_trends.return_value = [
-            NewsItem(title="niall horan", category="us-hot", provider="google", feed="Google Trends"),
-            NewsItem(title="masters 2026", category="us-hot", provider="google", feed="Google Trends"),
-        ]
-        mocked_google_news_top.return_value = [
-            NewsItem(
-                title="denver airport",
-                summary="Power outage impacts train service to gates.",
-                publisher="CBS News",
-                category="us-hot",
-                provider="google",
-                feed="Google News",
-            ),
-            NewsItem(
-                title="meningococcal meningitis outbreak",
-                summary="Health officials raise alarms after outbreak expands.",
-                publisher="The New York Times",
-                category="us-hot",
-                provider="google",
-                feed="Google News",
-            ),
-        ]
+        mocked_annotate.side_effect = lambda items, **kwargs: labeler.annotate_items(items)
 
-        section = collect_presets(
+        def side_effect(plan, topic_key, limit, timeout):
+            if topic_key == "us-hot" and plan.mode == "trends_us":
+                return [
+                    NewsItem(title="niall horan", category="us-hot", provider="google", feed="Google Trends"),
+                    NewsItem(title="masters 2026", category="us-hot", provider="google", feed="Google Trends"),
+                ]
+            if topic_key == "us-hot" and plan.mode == "news_top":
+                return [
+                    NewsItem(
+                        title="denver airport",
+                        summary="Power outage impacts train service to gates.",
+                        publisher="CBS News",
+                        category="us-hot",
+                        provider="google",
+                        feed="Google News",
+                    ),
+                    NewsItem(
+                        title="meningococcal meningitis outbreak",
+                        summary="Health officials raise alarms after outbreak expands.",
+                        publisher="The New York Times",
+                        category="us-hot",
+                        provider="google",
+                        feed="Google News",
+                    ),
+                ]
+            raise AssertionError(f"unexpected fetch: {topic_key} {plan.source}:{plan.mode}")
+
+        mocked_fetch_source_plan.side_effect = side_effect
+
+        section = collect_topics(
             ["us-hot"],
             source="google",
             limit=2,
@@ -295,20 +310,20 @@ class SemanticFilterTests(unittest.TestCase):
         self.assertEqual(labeler.calls, [2, 2])
         self.assertEqual([item.title for item in section.items], ["denver airport", "meningococcal meningitis outbreak"])
         self.assertEqual(section.filtered_count, 2)
-        mocked_google_news_top.assert_called_once()
+        self.assertEqual(mocked_fetch_source_plan.call_count, 2)
 
-    @patch("daily_cli.service.fetch_item_bodies")
-    @patch("daily_cli.service.fetch_google_trends_us")
-    @patch("daily_cli.service.get_semantic_labeler")
+    @patch("daily_cli.plugins.enrichers.fetch_item_bodies")
+    @patch("daily_cli.core.pipeline.fetch_source_plan")
+    @patch("daily_cli.core.pipeline.annotate_items")
     def test_body_fetch_only_runs_on_final_kept_items(
         self,
-        mocked_labeler,
-        mocked_google_trends,
+        mocked_annotate,
+        mocked_fetch_source_plan,
         mocked_fetch_bodies,
     ) -> None:
         labeler = UsHotRefillLabeler()
-        mocked_labeler.return_value = labeler
-        mocked_google_trends.return_value = [
+        mocked_annotate.side_effect = lambda items, **kwargs: labeler.annotate_items(items)
+        mocked_fetch_source_plan.return_value = [
             NewsItem(
                 title="niall horan",
                 category="us-hot",
@@ -326,7 +341,7 @@ class SemanticFilterTests(unittest.TestCase):
             ),
         ]
 
-        section = collect_presets(
+        section = collect_topics(
             ["us-hot"],
             source="google",
             limit=1,
@@ -345,18 +360,16 @@ class SemanticFilterTests(unittest.TestCase):
         self.assertEqual(mocked_fetch_bodies.call_args.kwargs["timeout"], 3.0)
         self.assertEqual(mocked_fetch_bodies.call_args.kwargs["max_chars"], 1000)
 
-    @patch("daily_cli.service.fetch_google_news_top")
-    @patch("daily_cli.service.fetch_google_trends_us")
-    @patch("daily_cli.service.get_semantic_labeler")
+    @patch("daily_cli.core.pipeline.fetch_source_plan")
+    @patch("daily_cli.core.pipeline.annotate_items")
     def test_us_hot_skips_google_news_refill_when_enough_items_remain(
         self,
-        mocked_labeler,
-        mocked_google_trends,
-        mocked_google_news_top,
+        mocked_annotate,
+        mocked_fetch_source_plan,
     ) -> None:
         labeler = UsHotRefillLabeler()
-        mocked_labeler.return_value = labeler
-        mocked_google_trends.return_value = [
+        mocked_annotate.side_effect = lambda items, **kwargs: labeler.annotate_items(items)
+        mocked_fetch_source_plan.return_value = [
             NewsItem(
                 title="denver airport",
                 summary="Power outage impacts train service to gates.",
@@ -373,7 +386,7 @@ class SemanticFilterTests(unittest.TestCase):
             ),
         ]
 
-        section = collect_presets(
+        section = collect_topics(
             ["us-hot"],
             source="google",
             limit=2,
@@ -384,7 +397,7 @@ class SemanticFilterTests(unittest.TestCase):
 
         self.assertEqual(labeler.calls, [2])
         self.assertEqual(len(section.items), 2)
-        mocked_google_news_top.assert_not_called()
+        self.assertEqual(mocked_fetch_source_plan.call_count, 1)
 
 
 class TfidfLabelerTests(unittest.TestCase):

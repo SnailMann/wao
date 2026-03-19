@@ -17,6 +17,8 @@ from urllib.request import Request, urlopen
 MODEL_REPO_ID = "intfloat/multilingual-e5-small"
 MODEL_CACHE_DIRNAME = "intfloat__multilingual-e5-small"
 TFIDF_BACKEND_ID = "tfidf-lexicon"
+APP_CACHE_DIRNAME = "daily"
+LEGACY_APP_CACHE_DIRNAME = "daily-cli"
 REQUIRED_MODEL_FILES = (
     "config.json",
     "model.safetensors",
@@ -647,7 +649,26 @@ def get_content_label_name(key: str) -> str:
 
 
 def default_model_dir() -> Path:
-    return Path.home() / ".cache" / "daily-cli" / "models" / MODEL_CACHE_DIRNAME
+    return Path.home() / ".cache" / APP_CACHE_DIRNAME / "models" / MODEL_CACHE_DIRNAME
+
+
+def legacy_model_dir() -> Path:
+    return Path.home() / ".cache" / LEGACY_APP_CACHE_DIRNAME / "models" / MODEL_CACHE_DIRNAME
+
+
+def resolve_default_model_dir(model_dir: str | None = None) -> Path:
+    if model_dir:
+        return Path(model_dir).expanduser()
+
+    preferred = default_model_dir()
+    if preferred.exists():
+        return preferred
+
+    legacy = legacy_model_dir()
+    if legacy.exists():
+        return legacy
+
+    return preferred
 
 
 def _resolve_hf_token() -> str:
@@ -672,7 +693,7 @@ def _load_runtime_dependencies():
         from transformers import AutoModel, AutoTokenizer, logging as transformers_logging
     except ImportError as exc:
         raise SemanticError(
-            "语义过滤依赖未安装，请先执行 `python3 -m pip install .` 安装完整依赖。"
+            "model 过滤依赖未安装，请先执行 `python3 -m pip install .[model]`。"
         ) from exc
     transformers_logging.set_verbosity_error()
     return torch, functional, AutoModel, AutoTokenizer
@@ -684,7 +705,7 @@ def _load_sklearn_dependencies():
         from sklearn.linear_model import LogisticRegression
     except ImportError as exc:
         raise SemanticError(
-            "TF-IDF 过滤依赖未安装，请先执行 `python3 -m pip install .` 安装完整依赖。"
+            "TF-IDF 过滤依赖未安装，请先执行 `python3 -m pip install .`。"
         ) from exc
     return TfidfVectorizer, LogisticRegression
 
@@ -716,7 +737,7 @@ def _download_file(file_name: str, destination: Path) -> None:
         except subprocess.CalledProcessError as exc:
             raise SemanticError(f"下载模型文件失败: {file_name} curl 退出码 {exc.returncode}") from exc
 
-    headers = {"User-Agent": "daily-cli/0.1"}
+    headers = {"User-Agent": "daily/0.2"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
     request = Request(url, headers=headers)
@@ -737,19 +758,19 @@ def _download_file(file_name: str, destination: Path) -> None:
 
 
 def ensure_model_downloaded(model_dir: str | None = None) -> str:
-    target_dir = Path(model_dir).expanduser() if model_dir else default_model_dir()
+    target_dir = resolve_default_model_dir(model_dir)
     missing = [name for name in REQUIRED_MODEL_FILES if not (target_dir / name).exists()]
     if missing:
         joined = ", ".join(missing)
         raise SemanticError(
-            "语义模型尚未准备好，请先运行 `daily-cli model download`。"
+            "语义模型尚未准备好，请先运行 `daily model download`。"
             f" 当前目录缺少: {joined}"
         )
     return str(target_dir)
 
 
 def download_model(model_dir: str | None = None, force: bool = False) -> str:
-    target_dir = Path(model_dir).expanduser() if model_dir else default_model_dir()
+    target_dir = resolve_default_model_dir(model_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
 
     if force:

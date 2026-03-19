@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "daily-cli"
-version = "0.1.0"
-description = "A cross-platform CLI for daily US/China hot topics, AI trends, and finance news."
+name = "daily"
+version = "0.2.0"
+description = "A command-line dashboard for daily topics, news signals, and GitHub trending projects."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
@@ -26,14 +26,25 @@ classifiers = [
   "Topic :: Internet :: WWW/HTTP",
 ]
 dependencies = [
-  "playwright>=1.46",
   "scikit-learn>=1.5",
+]
+
+[project.optional-dependencies]
+body = [
+  "playwright>=1.46",
+]
+model = [
+  "torch>=2.2",
+  "transformers>=4.41",
+]
+all = [
+  "playwright>=1.46",
   "torch>=2.2",
   "transformers>=4.41",
 ]
 
 [project.scripts]
-daily-cli = "daily_cli.cli:main"
+daily = "daily_cli.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["daily_cli*"]

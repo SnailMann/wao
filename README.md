@@ -1,177 +1,256 @@
-# daily-cli
+# daily
 
-`daily-cli` 是一个面向 Linux / macOS 的命令行工具，用来快速拉取每日热门信息，重点覆盖：
+`daily` 是一个面向 Linux / macOS 的命令行资讯工具，用来快速查看每日热点、专题新闻信号和 GitHub Trending。它优先使用公开、稳定、适合命令行接入的数据源，并把抓取、过滤、正文增强做成了可插拔的模块。
 
-- 美国热门事件
-- 中国热门事件
-- AI发展
-- 金融热门事件
-- GitHub Trending
-- 额外附带一个 `us-market` 预设，方便快速查看美股焦点
+当前内置的 topics：
 
-它参考了你给的 `daily-news` 思路，但做了几处增强：
+- `us-hot`：美国热门事件
+- `china-hot`：中国热门事件
+- `ai`：AI 发展
+- `finance`：金融热门事件
+- `us-market`：美股焦点
+- `github`：GitHub Trending
+- `search`：自定义 Google News 查询
 
-- 改成可安装的 Python 包，支持 `pip install .`
-- Google 侧使用当前可用的 Trends RSS / Google News RSS
-- Baidu 侧使用百度热榜结构化数据与关键词过滤
-- 默认使用 `tfidf` 混合后端做过滤分类
-- 默认仅在 `us-hot` 和 `china-hot` 里过滤 `soft` 标签
-- 支持 `model` 和 `tfidf` 两种标签/过滤后端
-- 只有真正启用过滤的 preset 才会触发额外抓取与分类
-- 提供多命令、多预设、多输出格式
+## 特性
+
+- 可安装的 Python CLI，入口命令为 `daily`
+- topic、source、filter、enricher 分层注册，方便后续扩展
+- 默认轻量模式使用 `TF-IDF + LogisticRegression + 词表` 做过滤
+- 支持切换到 `intfloat/multilingual-e5-small` 的 `model` 模式
+- 默认仅 `us-hot` / `china-hot` 过滤 `soft`
+- `us-hot` 过滤后不足时，会自动回补 Google News Top Stories
+- 支持 Playwright 无头模式抓正文
+- 支持文本和 JSON 两种输出
 
 ## 安装
 
-要求 Python 3.10+。
+要求 Python `3.10+`。
+
+轻量安装，只使用默认的 `tfidf` 过滤模式：
 
 ```bash
 python3 -m pip install .
-daily-cli model download
 ```
 
-如果你只打算使用 `--filter-mode tfidf`，可以不下载模型。
-如果你要使用 `--fetch-body` 抓取正文，还需要额外安装 Playwright Chromium：
+如果你需要 `model` 过滤模式：
 
 ```bash
+python3 -m pip install '.[model]'
+daily model download
+```
+
+如果你需要正文抓取：
+
+```bash
+python3 -m pip install '.[body]'
 python3 -m playwright install chromium
 ```
 
-安装后可直接使用：
+如果你想一次安装全部可选能力：
 
 ```bash
-daily-cli summary
+python3 -m pip install '.[all]'
+python3 -m playwright install chromium
+daily model download
 ```
 
-如果你更喜欢隔离式安装，也可以：
+## 快速开始
 
 ```bash
-python3 -m pip install pipx
-pipx install .
+daily topics
+daily summary
+daily fetch us-hot china-hot
+daily fetch github --limit 10
+daily search "人工智能" --google-locale cn
 ```
 
 ## 命令
 
-### 1. 一次看默认五类信息
+### `daily topics`
+
+列出全部 topics、默认来源、默认数量和默认过滤策略。
 
 ```bash
-daily-cli summary
-daily-cli summary --no-filter
+daily topics
+daily topics --format json
 ```
 
-### 2. 拉取指定预设
+### `daily summary`
+
+输出默认 dashboard：
+
+- `us-hot`
+- `china-hot`
+- `ai`
+- `finance`
+- `github`
 
 ```bash
-daily-cli fetch us-hot
-daily-cli fetch china-hot ai finance
-daily-cli fetch github --limit 10
-daily-cli fetch us-market --source all --limit 8
+daily summary
+daily summary --no-filter
+daily summary --filter-mode model
 ```
 
-可用预设：
+### `daily fetch`
 
-- `us-hot`: 美国热门事件
-- `china-hot`: 中国热门事件
-- `ai`: AI发展
-- `finance`: 金融热门事件
-- `github`: GitHub Trending
-- `us-market`: 美股焦点
-
-### 3. 自定义关键词查询
+拉取一个或多个指定 topics。
 
 ```bash
-daily-cli search OpenAI
-daily-cli search 人工智能 --google-locale cn
-daily-cli search 美股 --format json
+daily fetch us-hot
+daily fetch china-hot ai finance
+daily fetch us-market --source all --limit 8
+daily fetch github --limit 10 --format json
 ```
 
-### 4. 查看支持的预设
+### `daily search`
+
+使用 Google News RSS 按关键词查询。
 
 ```bash
-daily-cli presets
+daily search OpenAI
+daily search "人工智能" --google-locale cn
+daily search "Federal Reserve" --fetch-body
+```
+
+### `daily model download`
+
+下载 `model` 过滤模式所需的本地模型文件。
+
+```bash
+daily model download
+daily model download --force
 ```
 
 ## 常用参数
 
-```bash
+```text
 --source auto|google|baidu|github|all
 --limit N
---timeout 10
+--timeout SECONDS
 --format text|json
---no-semantic
+--filter-mode tfidf|model
+--exclude-label macro|industry|tech|public|soft
 --no-filter
---exclude-label soft
---semantic-model-dir /path/to/model
---filter-mode model|tfidf
+--no-semantic
+--semantic-model-dir PATH
 --fetch-body
---body-timeout 15
---body-max-chars 4000
+--body-timeout SECONDS
+--body-max-chars N
 ```
 
-说明：
+补充说明：
 
-- `auto`: 使用该预设推荐的来源
-- `all`: 聚合该命令支持的全部来源
-- `google`: 仅 Google
-- `baidu`: 仅 Baidu
-- `github`: 仅 GitHub Trending
+- `auto`：使用 topic 推荐的默认来源
+- `all`：聚合该 topic 支持的全部来源
+- `search` 默认只检索，不自动分类；显式传入 `--exclude-label` 后才会启动过滤
+- `github` 默认不做分类，也不抓正文
 
-默认条数：
+## 默认行为
 
-- 大多数预设默认返回 5 条
-- `github` 默认返回 10 条
+- 默认仅 `us-hot` / `china-hot` 过滤 `soft`
+- `ai` / `finance` / `us-market` / `github` / `search` 默认只抓取，不自动分类
+- 开启过滤后，会额外抓取更多候选，以保证过滤后尽量补足 `limit`
+- `us-hot` 过滤后不足时，会按需用 Google News Top Stories 回补
+- `tfidf` 是默认过滤模式，更适合开箱即用和开源分发
 
-默认语义行为：
+## Topic 概览
 
-- 默认仅 `us-hot` / `china-hot` 会触发 `soft` 过滤
-- `ai` / `finance` / `us-market` / `github` / `search` 默认不会启动分类
-- 如果关闭过滤，使用 `--no-filter`，此时也不会做额外抓取或分类
-- 如果想完全关闭语义能力，使用 `--no-semantic`
-- 如果想切到轻量过滤器，使用 `--filter-mode tfidf`
-- 如果想对最终保留结果继续抓正文，使用 `--fetch-body`
+| Topic | 默认来源 | 默认数量 | 默认过滤 |
+| --- | --- | --- | --- |
+| `us-hot` | `google` | `5` | `soft` |
+| `china-hot` | `baidu` | `5` | `soft` |
+| `ai` | `google + baidu` | `5` | 无 |
+| `finance` | `google + baidu` | `5` | 无 |
+| `us-market` | `google + baidu` | `5` | 无 |
+| `github` | `github` | `10` | 无 |
 
-`search` 命令还支持：
+## 过滤模式
 
-```bash
---google-locale auto|us|cn
+### `tfidf`
+
+默认模式，内部使用：
+
+- `TF-IDF`
+- `LogisticRegression`
+- 少量中英文词表与短语信号
+
+这个模式适合：
+
+- 开源项目默认发布
+- 依赖更轻
+- 无需提前下载大模型
+- 启动更快
+
+### `model`
+
+使用 `intfloat/multilingual-e5-small` 做向量打标，适合需要更强语义能力的场景。
+
+这个模式需要：
+
+- 安装 `.[model]`
+- 先执行 `daily model download`
+
+## 正文抓取
+
+传入 `--fetch-body` 后，`daily` 会在抓取、过滤、回补都完成之后，只对最终保留的链接抓正文。
+
+当前正文抓取链路：
+
+- 使用 Playwright Chromium 无头浏览器
+- 优先等待 Google News 跳转到真实文章页
+- 抽取 `article` / `main` 等正文容器
+- 抽不到时回退到 `body.innerText`
+
+当前边界：
+
+- 某些站点会触发验证码、验证页或订阅墙
+- `github` topic 默认不抓正文
+
+## 项目结构
+
+```text
+daily_cli/
+  __main__.py
+  cli.py         # CLI 参数与帮助面板
+  core/
+    models.py    # NewsItem / SectionResult 数据模型
+    topics.py    # topic 注册表
+    pipeline.py  # 抓取 / 过滤 / 回补 / 增强总管线
+  plugins/
+    providers.py # source 插件注册表
+    filters.py   # filter 插件注册表
+    enrichers.py # body 等增强插件注册表
+  runtime/
+    sources.py   # 原始上游接口与解析器
+    semantic.py  # tfidf/model 两套打标实现
+    body_fetch.py
+  renderers/
+    output.py    # text/json 输出
 ```
 
-## 示例
+这套结构的目标是：
 
-```bash
-daily-cli model download
-daily-cli summary --limit 5
-daily-cli summary --no-filter
-daily-cli summary --filter-mode tfidf
-daily-cli fetch ai finance --source all
-daily-cli fetch china-hot --exclude-label soft --exclude-label public
-daily-cli fetch github --limit 10
-daily-cli fetch us-hot --fetch-body --body-max-chars 3000
-daily-cli fetch china-hot --format json
-daily-cli search "Federal Reserve" --google-locale us
-daily-cli search "人工智能"
-```
+- CLI 只负责参数解析和输出
+- source / filter / enricher 都能单独演进
+- 新增一个 topic 时，尽量只需要加注册表配置
 
-## 设计说明
+## 开发
 
-- `us-hot` 默认使用 Google Trends RSS，因为它更适合美国热门事件。
-- 当 `us-hot` 开启 `soft` 过滤且 Google Trends 保留下来的条目不足时，会按需用 Google News Top Stories 回补。
-- `china-hot` 默认使用百度热榜结构化数据。
-- `ai` / `finance` 默认聚合 Google News RSS 与百度热榜过滤结果。
-- `github` 使用 GitHub Trending 页面抓取热门项目、语言、Stars、Forks 和今日新增 Stars。
-- 标签分类保持为 `macro`、`industry`、`tech`、`public`、`soft`。
-- 默认后端为 `tfidf`，也支持 `model` 后端。
-- `tfidf` 后端内部使用 `TF-IDF + LogisticRegression + 少量词表` 的混合分类，训练语料由 `model` 伪标注样本和少量补充合成样本组成。
-- 默认仅 `us-hot` / `china-hot` 过滤 `soft`，其他预设默认既不拦截，也不启动分类。
-- `--fetch-body` 会在过滤和回补完成后，针对最终保留结果的链接，用 Playwright 无头模式抓取正文。
-- `github` 预设暂不抓正文。
-- Baidu 普通网页搜索较容易触发验证码，因此没有把它作为核心依赖接口。
-
-更详细的类别、来源、排序和降级逻辑说明见：
-
-- [docs/NEWS_PIPELINE.md](./docs/NEWS_PIPELINE.md)
-
-## 测试
+运行测试：
 
 ```bash
 python3 -m unittest discover -s tests -v
 ```
+
+查看帮助：
+
+```bash
+daily --help
+daily fetch --help
+daily search --help
+```
+
+更详细的 topic、来源、排序、过滤和降级逻辑见：
+
+- [docs/NEWS_PIPELINE.md](./docs/NEWS_PIPELINE.md)

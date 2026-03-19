@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from daily_cli.models import NewsItem, SectionResult
-from daily_cli.output import render_text
+from daily_cli.core.models import NewsItem, SectionResult
+from daily_cli.renderers.output import render_text
 
 
 class OutputRenderingTests(unittest.TestCase):

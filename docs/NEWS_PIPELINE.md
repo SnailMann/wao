@@ -1,40 +1,89 @@
-# daily-cli 资讯分类与聚合设计说明
+# daily 资讯聚合与过滤设计
 
-本文档说明 `daily-cli` 当前版本如何定义资讯类别、如何判断类别、使用了哪些数据源、如何做多来源排序、去重与降级，以及当前实现的边界。
-
-当前版本还包含一个默认开启的语义过滤层：
-
-- 默认使用 `tfidf + LogisticRegression + 少量词表`
-- 也支持 `intfloat/multilingual-e5-small`
-- 默认仅 `us-hot` / `china-hot` 触发 `soft` 过滤
-- 未配置过滤的 preset 默认不会启动分类
-- 可通过 CLI 参数关闭过滤或切换后端
-- 只有启用过滤的分组才会额外放大抓取条数并进入分类链路
+本文档说明 `daily` 当前版本如何组织 topics、使用哪些公开来源、如何排序与去重、什么时候启用过滤、以及插件式结构是如何工作的。
 
 ## 1. 设计目标
 
-`daily-cli` 的目标不是做“通用新闻门户”，而是提供一个偏实用的命令行聚合工具，让用户可以快速查看：
+`daily` 不是通用新闻门户，也不是全文搜索引擎。它更像一个面向命令行的每日信号面板，强调：
 
-- 美国热门事件
-- 中国热门事件
-- AI发展
-- 金融热门事件
-- GitHub Trending
-- 美股焦点
-- 自定义关键词结果
+- 公开可访问的数据源
+- 尽量稳定的抓取方式
+- 快速查看而不是重型部署
+- 默认轻量、可选增强
+- 易扩展的 topic / provider / filter / enricher 架构
 
-它强调：
+## 2. 代码结构
 
-- 可安装、可本地运行
-- 尽量依赖稳定且公开可访问的接口
-- 面向命令行的快速查看体验
-- 尽量减少重依赖和复杂部署
+当前项目按职责拆成 5 层：
 
-## 2. 预设类别总览
+### 2.1 `core/topics.py`
 
-### 2.1 默认摘要
+负责定义 topic 注册表。每个 topic 会描述：
 
-`summary` 命令会固定输出 5 个分组：
+- key
+- label
+- description
+- source plans
+- default sources
+- default limit
+- default excluded labels
+- optional refill plan
+
+### 2.2 `plugins/providers.py`
+
+负责 source 插件注册表。当前内置：
+
+- `google`
+- `baidu`
+- `github`
+
+每个 source 再按 mode 派发到具体抓取实现，例如：
+
+- `google:trends_us`
+- `google:news_search`
+- `google:news_top`
+- `baidu:hotboard`
+- `baidu:keyword_hotboard`
+- `github:trending`
+
+### 2.3 `plugins/filters.py`
+
+负责过滤模式注册表。当前内置：
+
+- `tfidf`
+- `model`
+
+### 2.4 `plugins/enrichers.py`
+
+负责结果增强插件。当前内置：
+
+- `body`
+
+### 2.5 `core/pipeline.py`
+
+负责把 topic、provider、filter、enricher 串起来，统一处理：
+
+- 抓取
+- 合并
+- 去重
+- 分类
+- 过滤
+- 回补
+- 正文增强
+
+## 3. Topic 一览
+
+| Topic | 中文名称 | 默认来源 | 默认数量 | 默认过滤 |
+| --- | --- | --- | --- | --- |
+| `us-hot` | 美国热门事件 | `google` | `5` | `soft` |
+| `china-hot` | 中国热门事件 | `baidu` | `5` | `soft` |
+| `ai` | AI 发展 | `google + baidu` | `5` | 无 |
+| `finance` | 金融热门事件 | `google + baidu` | `5` | 无 |
+| `us-market` | 美股焦点 | `google + baidu` | `5` | 无 |
+| `github` | GitHub Trending | `github` | `10` | 无 |
+| `search` | 自定义查询 | `google` | 用户指定 | 无 |
+
+默认摘要 `summary` 会输出：
 
 - `us-hot`
 - `china-hot`
@@ -42,50 +91,34 @@
 - `finance`
 - `github`
 
-### 2.2 全部预设
+## 4. 数据源
 
-| 预设 | 中文名称 | 默认来源 | 说明 |
-| --- | --- | --- | --- |
-| `us-hot` | 美国热门事件 | `google` | 依赖 Google Trends US 日趋势，过滤后不足时按需回补 Google News Top Stories |
-| `china-hot` | 中国热门事件 | `baidu` | 依赖百度热榜实时榜 |
-| `ai` | AI发展 | `google + baidu` | Google News AI 查询 + 百度热榜关键词过滤 |
-| `finance` | 金融热门事件 | `google + baidu` | Google News 金融查询 + 百度热榜关键词过滤 |
-| `github` | GitHub Trending | `github` | GitHub Trending 热门仓库列表 |
-| `us-market` | 美股焦点 | `google + baidu` | Google News 美股查询 + 百度热榜关键词过滤 |
-| `search` | 自定义查询 | `google` | 按用户输入关键词通过 Google News 查询 |
+### 4.1 Google
 
-## 3. 数据源清单
+#### `trends_us`
 
-### 3.1 Google 来源
-
-#### A. Google Trends RSS
-
-用途：
-
-- `us-hot`
-
-当前使用的接口：
+接口：
 
 ```text
 https://trends.google.com/trending/rss?geo=US
 ```
 
-解析字段：
+用途：
 
-- `title`
-- `ht:approx_traffic`
-- `pubDate`
-- `ht:news_item_title`
-- `ht:news_item_source`
-- `ht:news_item_url`
+- `us-hot`
 
-说明：
+特点：
 
-- `us-hot` 的主来源是 Google Trends RSS。
-- 当默认 `soft` 过滤开启且剩余条目不足时，会额外拉取 Google News Top Stories 进行回补。
-- Google Trends 原始条目仍优先展示，回补条目只在数量不足时追加到后面。
+- 更适合表示“今天美国在搜什么”
+- 标题通常更短、更像趋势词而不是完整新闻标题
 
-#### B. Google News RSS Search
+#### `news_search`
+
+接口：
+
+```text
+https://news.google.com/rss/search?q=...&hl=...&gl=...&ceid=...
+```
 
 用途：
 
@@ -94,514 +127,299 @@ https://trends.google.com/trending/rss?geo=US
 - `us-market`
 - `search`
 
-当前使用的接口：
+#### `news_top`
+
+接口：
 
 ```text
-https://news.google.com/rss/search?q=...&hl=...&gl=...&ceid=...
+https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en
 ```
-
-当前代码内使用的主要查询词：
-
-- `ai`
-  - `AI OR "artificial intelligence" OR OpenAI OR Anthropic OR Gemini OR Nvidia`
-- `finance`
-  - `"stock market" OR Nasdaq OR "S&P 500" OR "Dow Jones" OR "Federal Reserve" OR earnings OR inflation`
-- `us-market`
-  - `"US stocks" OR "stock market" OR Nasdaq OR "S&P 500" OR "Dow Jones"`
-
-`search` 命令直接把用户的原始查询词作为 `q` 参数传入。
-
-### 3.2 Baidu 来源
-
-#### A. 百度热榜实时榜
 
 用途：
 
-- `china-hot`
-- `ai` / `finance` / `us-market` / `search` 的热榜补充来源
+- 仅用作 `us-hot` 的回补源
 
-当前使用的页面：
+### 4.2 Baidu
+
+#### `hotboard`
+
+页面：
 
 ```text
 https://top.baidu.com/board?tab=realtime
 ```
 
-实现方式：
+用途：
 
-- 不是解析 DOM class，而是直接解析页面里的 `<!--s-data:{...}-->` 结构化 JSON。
-- 这样比纯 HTML 选择器更稳定。
+- `china-hot`
 
-解析字段：
+实现：
 
-- `word`
-- `query`
-- `desc`
-- `hotScore`
-- `url`
-- `appUrl`
-- `isTop`
-- `hotChange`
+- 不依赖 DOM class
+- 直接解析页面里的结构化数据块
 
-### 3.3 没有采用的来源
-
-当前没有把百度普通网页搜索结果页作为核心来源，原因是：
-
-- 更容易触发验证码
-- 返回结构不稳定
-- 做成本地 CLI 时可维护性较差
-
-### 3.4 GitHub 来源
-
-#### A. GitHub Trending
+#### `keyword_hotboard`
 
 用途：
 
-- `github`
+- `ai`
+- `finance`
+- `us-market`
 
-当前使用的页面：
+实现：
+
+1. 先抓百度热榜
+2. 再基于关键词做二次过滤
+
+### 4.3 GitHub
+
+#### `trending`
+
+页面：
 
 ```text
 https://github.com/trending
 ```
 
-实现方式：
+用途：
 
-- 直接抓取 GitHub Trending HTML
-- 从每个仓库卡片中解析仓库名、描述、语言、总 Stars、Forks、今日新增 Stars
+- `github`
 
-当前输出的项目信息包括：
+输出字段：
 
-- 仓库名，例如 `owner/repo`
-- 仓库链接
-- 仓库描述
-- 编程语言
-- 总 Stars
+- 仓库名
+- 描述
+- 语言
+- Stars
 - Forks
 - 今日新增 Stars
 
-## 4. 类别是怎么判断出来的
+## 5. Topic 是怎么定义的
 
-## 4.1 `us-hot`
+### 5.1 来源定义型 topic
 
-判断方式：
+这类 topic 的边界主要由来源决定：
 
-- 主体由 Google Trends US 返回的热门趋势决定
-- 当默认 `soft` 过滤后数量不足时，会补充少量 Google News Top Stories
+- `us-hot`
+- `china-hot`
+- `github`
 
-结论：
+其中：
 
-- `us-hot` 是“来源定义型类别”
-- 不是靠关键词检索定义出来的
-- 但在过滤场景里，存在“Google Trends 主源 + Google News 回补”的补量逻辑
+- `us-hot` 的主来源是 Google Trends US
+- `china-hot` 的主来源是百度热榜
+- `github` 的主来源是 GitHub Trending
 
-## 4.2 `china-hot`
+### 5.2 查询定义型 topic
 
-判断方式：
+这类 topic 的边界主要由查询词或关键词决定：
 
-- 不做本地分类
-- 直接以百度热榜实时榜为准
+- `ai`
+- `finance`
+- `us-market`
+- `search`
 
-结论：
+例如：
 
-- `china-hot` 也是“来源定义型类别”
+- `ai` 通过固定 Google News 查询词定义边界
+- `finance` 通过固定金融查询词定义边界
+- `us-market` 通过美股查询词定义边界
+- `search` 直接使用用户输入的查询词
 
-## 4.3 `ai`
+## 6. 多来源排序与去重
 
-判断方式由两部分组成：
+### 6.1 单来源
 
-### Google 侧
+单来源 topic 会保留上游原始顺序，再做标题去重。
 
-- 用固定查询词去 Google News RSS Search 搜索
-- 查询词本身定义了“AI 类别”的边界
+### 6.2 多来源
 
-### Baidu 侧
+当一个 topic 同时使用多个来源时，`daily` 会按“轮询合并”方式混排：
 
-Baidu 侧不是语义模型判断，而是直接用百度热榜实时榜做关键词过滤。
-
-AI 关键词目前包括：
-
-```text
-ai
-artificial intelligence
-openai
-anthropic
-gemini
-nvidia
-人工智能
-大模型
-机器人
-智能体
-```
-
-只要标题或摘要中命中这些词，就会被视为 AI 相关。
-
-## 4.4 `finance`
-
-判断方式也分 Google 和 Baidu 两侧：
-
-### Google 侧
-
-- 用固定金融查询词去 Google News 搜索
-
-### Baidu 侧
-
-Baidu 侧采用规则过滤，不是语义分类：
-
-1. 抓取百度热榜实时榜
-2. 再从百度热榜里筛选出命中金融关键词的条目
-
-金融关键词目前包括：
-
-```text
-stock
-market
-nasdaq
-dow
-s&p
-fed
-finance
-financial
-earnings
-inflation
-金融
-财经
-股市
-美股
-a股
-黄金
-油价
-银行
-基金
-人民币
-债
-```
-
-这意味着：
-
-- “油价上涨” 会被识别为金融/财经相关
-- “美股”“股市”“银行”“基金” 也会被纳入
-
-这是一种启发式规则分类，不是语义推理，因此可能存在：
-
-- 误报：例如某条热榜只是顺带提到油价
-- 漏报：例如金融事件没有出现上述关键词
-
-## 4.5 `us-market`
-
-判断方式与 `finance` 类似，但关键词和查询更偏美股：
-
-Google 查询词：
-
-```text
-"US stocks" OR "stock market" OR Nasdaq OR "S&P 500" OR "Dow Jones"
-```
-
-Baidu 关键词：
-
-```text
-美股
-纳指
-道指
-标普
-nasdaq
-dow
-s&p
-股票
-股指
-```
-
-## 4.6 `github`
-
-`github` 不做本地主题分类，而是直接把 GitHub Trending 页面中的热门仓库卡片作为结果。
-
-判断方式：
-
-- 不做关键词或语义分类
-- 直接以 GitHub Trending 页面顺序为准
-
-## 4.7 `search`
-
-`search` 是动态类别，不预设固定主题，且当前只通过 Google 查询。
-
-Google 侧：
-
-- 直接用用户输入的查询词做 Google News RSS Search
-
-额外逻辑：
-
-- `--google-locale auto` 时，如果查询里包含中文字符，则自动选 `cn`
-- 否则自动选 `us`
-
-## 5. 多来源结果是如何排序的
-
-这是一个很关键的点。
-
-## 5.1 单来源时
-
-单来源的顺序完全遵循上游原始顺序：
-
-- Google Trends：按 RSS 原顺序
-- Google News：按 RSS 原顺序
-- GitHub Trending：按页面原始顺序
-- 百度热榜：按热榜原顺序
-
-`us-hot` 在开启过滤时有一个例外：
-
-- 先保留 Google Trends 中未被过滤的条目
-- 如果还不够 `limit`，再按 Google News Top Stories 的原始顺序追加回补条目
-
-## 6. 正文抓取是怎么做的
-
-这是一个可选功能，只有显式传入 `--fetch-body` 才会启用。
-
-执行时机：
-
-- 先完成抓取
-- 再完成标签过滤
-- 如果是 `us-hot`，先做 Google News Top Stories 回补
-- 最后只对“最终保留结果”的链接抓正文
-
-实现方式：
-
-- 使用 Playwright Chromium 无头模式
-- Google News RSS 跳转链接会先等待重定向到真实文章页
-- 百度搜索页会优先尝试打开首条结果页
-- 之后从 `article / main / body` 等候选节点中抽取最长正文文本
-
-限制：
-
-- `github` 预设暂不抓正文
-- 个别站点会出现验证码、反爬或拒绝访问，此时会在结果里返回正文抓取失败原因
-- 抓取正文会显著增加响应时间，因此默认关闭
-
-## 5.2 百度专题混合时
-
-对于 `ai` / `finance` / `us-market` 的 Baidu 侧，排序规则是：
-
-1. 先从百度热榜中过滤出命中关键词的条目
-2. 再按命中分数和原始热榜顺序排序
-
-其中内部排序规则是：
-
-1. 先按关键词命中数量从高到低排序
-2. 分数相同则按原始热榜排名排序
-
-## 5.3 Google + Baidu 同时存在时
-
-多来源聚合不会简单把 Google 全放前面再截断。
-
-当前实现使用“轮询合并”：
-
-1. 先取 Google 第 1 条
-2. 再取 Baidu 第 1 条
-3. 再取 Google 第 2 条
-4. 再取 Baidu 第 2 条
-5. 依此类推
+1. 先取每个来源的第 1 条
+2. 再取每个来源的第 2 条
+3. 以此类推
 
 这样做的目的：
 
-- 避免一个来源把另一个来源完全挤掉
-- 在小 `limit` 情况下也能同时看到 Google 和 Baidu
+- 避免某一个来源完全淹没其他来源
+- 让最终结果更像“混合信号流”
 
-## 6. 语义标签与过滤
+### 6.3 去重
 
-这是当前版本新增的一层本地处理逻辑，位于“抓取完成、输出之前”。
+去重规则基于标准化标题：
 
-### 6.1 使用的后端
+- 折叠空白
+- 去掉首尾空格
+- 转小写比较
 
-- `model`
-  - 模型：`intfloat/multilingual-e5-small`
-  - 用途：把 `title + summary + publisher` 编码成向量，再与预定义标签描述做相似度比较
-- `tfidf`
-  - 不依赖大模型
-  - 使用固定标签原型文本、少量词表、TF-IDF 向量和 LogisticRegression 分类器完成分类
-  - 训练语料由 `model` 伪标注样本和少量补充合成样本组成
+如果标准化标题重复，则只保留第一次出现的条目。
 
-因此：
+## 7. 过滤链路
 
-- 默认推荐 `tfidf`
-- 想要更强语义能力时用 `model`
-- 想要更轻、更快、零模型下载时用 `tfidf`
+### 7.1 默认是否启动过滤
 
-两种后端都使用同一套标签定义，区别只在于打标方式。
+默认仅这两个 topic 会启动过滤：
 
-### 6.2 当前标签集合
+- `us-hot`
+- `china-hot`
 
-当前只保留 5 个主标签：
+默认过滤标签：
 
-- `macro`：宏观、政策、监管、国际局势
-- `industry`：公司、商业、产业、供应链、财报
-- `tech`：AI、芯片、软件、开源、研发
-- `public`：公共事务、法律、灾害、安全、民生
-- `soft`：猎奇八卦、个体纠纷、情绪化社会新闻、低信息量内容
+- `soft`
 
-每条结果只会写入一个主标签，并带一个相似度分数。
+这些 topic 默认不自动分类：
 
-### 6.3 默认行为
+- `ai`
+- `finance`
+- `us-market`
+- `github`
+- `search`
 
-- 默认仅 `us-hot` / `china-hot` 触发 `soft` 过滤
-- `ai` / `finance` / `us-market` / `github` / `search` 默认不启动分类
-- `--no-filter` 会直接关闭过滤链路，此时不会做额外抓取或分类
-- `--no-semantic` 会完全跳过语义模型
-- `--filter-mode tfidf` 会切到轻量 TF-IDF 过滤器
+它们只有在显式传入 `--exclude-label` 时，才会进入分类和过滤链路。
 
-### 6.4 为什么这样设计
+### 7.2 为什么不是所有 topic 都默认过滤
 
-目标不是做细粒度新闻学分类，而是优先过滤掉“没有明显认知增量”的内容。
+因为分类本身有成本：
 
-例如这类内容通常会被压到 `soft`：
+- 要抓更多候选
+- 要跑打标
+- 还可能误伤高价值内容
 
-- 猎奇个案
-- 情绪化冲突
-- 婚恋家事
-- 纯流量型社会热搜
+所以当前策略是：
 
-## 7. 去重规则
+- 杂讯最多的 `us-hot` / `china-hot` 默认过滤
+- 其他更专题化的 topic 默认不动
 
-当前去重是“标题归一化去重”，不是语义去重。
+### 7.3 候选放大
 
-归一化规则：
+一旦启用过滤，抓取阶段不会只抓最终 `limit`，而是先抓更多候选：
 
-- 去掉首尾空白
-- 折叠多余空格
-- 做 `casefold`
+```text
+max(limit * 3, limit + 8)
+```
 
-也就是说：
+这样做是为了在过滤掉一部分内容后，仍然有机会补足结果数量。
 
-- 大小写差异会被认为是同一条
-- 语义相近但标题不同，不会去重
+## 8. 过滤模式
 
-## 8. 降级与补全策略
+### 8.1 `tfidf`
 
-## 8.1 Baidu 专题筛选
+这是默认模式，也是开源分发时的推荐模式。
 
-对于 `ai` / `finance` / `us-market`：
+内部由三部分组成：
 
-1. 抓取百度热榜实时榜
-2. 对标题和摘要做关键词匹配
-3. 输出命中的热榜条目
+- `TF-IDF`
+- `LogisticRegression`
+- 少量中英文词表 / 短语信号
 
-## 8.2 上游失败处理
+训练语料来源：
 
-如果某个来源失败：
+- 由 `model` 模式生成的一批伪标签样本
+- 补充的少量人工构造样本
 
-- 不会让整个命令直接失败
-- 只会在该分组的 `warnings` 里记录错误
-- 其他来源仍然照常输出
+适合：
 
-这意味着：
+- 默认安装
+- 启动更快
+- 无需提前下载大模型
 
-- `ai --source all` 时，哪怕百度失败，只要 Google 成功，仍会有结果
-- `summary` 中某一组失败，不会拖垮其他组
+### 8.2 `model`
 
-## 9. 输出字段说明
+使用：
 
-每条 `NewsItem` 目前包含这些字段：
+```text
+intfloat/multilingual-e5-small
+```
 
-| 字段 | 含义 |
-| --- | --- |
-| `title` | 标题 |
-| `category` | 所属类别 |
-| `provider` | 来源大类，`google`、`baidu` 或 `github` |
-| `feed` | 具体来源名，如 `Google News`、`Baidu Hotboard`、`GitHub Trending` |
-| `link` | 跳转链接 |
-| `summary` | 摘要或补充标题 |
-| `publisher` | 发布方或来源说明 |
-| `published_at` | 发布时间，已转成本地时区字符串 |
-| `rank` | 在来源中的顺位 |
-| `hot_score` | 百度热榜热度值 |
-| `approx_traffic` | Google Trends 的近似热度 |
-| `search_query` | 保留字段，当前默认不使用 |
-| `language` | GitHub Trending 仓库语言 |
-| `repo_stars` | GitHub 仓库总 Stars |
-| `repo_forks` | GitHub 仓库 Forks |
-| `stars_today` | GitHub Trending 今日新增 Stars |
-| `content_label` | 语义主标签键，如 `macro`、`soft` |
-| `content_label_name` | 语义主标签中文名 |
-| `content_label_score` | 标签相似度分数 |
-| `tags` | 附加标签，如 `新`、`热`、`置顶` |
+适合：
 
-分组级字段新增：
+- 需要更强语义能力
+- 愿意接受更高的模型下载和运行成本
 
-| 字段 | 含义 |
-| --- | --- |
-| `semantic_enabled` | 是否启用语义打标 |
-| `semantic_model` | 当前使用的语义后端或模型标识 |
-| `filter_enabled` | 是否启用语义过滤 |
-| `excluded_labels` | 当前排除的标签 |
-| `filtered_count` | 本次被过滤掉的条数 |
+## 9. 标签体系
 
-## 10. `--source` 参数的真实语义
+当前标签保持少量且稳定：
 
-| 参数 | 含义 |
-| --- | --- |
-| `auto` | 用该预设推荐来源 |
-| `all` | 用该预设支持的全部来源 |
-| `google` | 只用 Google |
-| `baidu` | 只用 Baidu |
-| `github` | 只用 GitHub Trending |
+- `macro`
+- `industry`
+- `tech`
+- `public`
+- `soft`
 
-注意：
+其中 `soft` 表示：
 
-- 不是所有预设都支持 Google、Baidu 和 GitHub 双来源
-- 例如 `us-hot` 只支持 `google`
-- `china-hot` 只支持 `baidu`
-- `github` 只支持 `github`
+- 猎奇
+- 八卦
+- 情绪化个体故事
+- 流量型社会新闻
+- 缺少明显公共价值或认知增量的内容
 
-默认条数：
+## 10. 回补逻辑
 
-- 大多数预设默认返回 5 条
-- `github` 默认返回 10 条
+当前只有 `us-hot` 配置了回补。
 
-## 11. 为什么没有用更复杂的语义分类
+逻辑如下：
 
-当前版本没有引入 embedding/NLI/LLM 语义分类，原因是：
+1. 先抓 Google Trends US
+2. 如果默认 `soft` 过滤后不足 `limit`
+3. 再抓 Google News Top Stories
+4. 对回补条目继续做同样的分类和过滤
+5. 只追加未重复且未被过滤掉的结果
 
-- 目标是一个轻量 CLI
-- 希望尽量只用标准库和公开可访问接口
-- 规则分类更可控、更容易解释
-- 不增加模型部署成本
+这样可以缓解 Google Trends 标题过短、娱乐噪声偏多的问题。
 
-这意味着当前实现更偏：
+## 11. 正文抓取
 
-- 来源定义
-- 查询定义
-- 关键词过滤
+启用 `--fetch-body` 后，正文抓取只会发生在：
 
-而不是：
+- 抓取完成后
+- 过滤完成后
+- 回补完成后
+- 最终保留的结果上
 
-- 向量相似度分类
-- 零样本 NLI 分类
-- 大模型语义判别
+正文抓取当前使用 Playwright Chromium：
 
-## 12. 当前实现的优点和局限
+- 支持等待 Google News 跳转到真实文章页
+- 优先抽取 `article` / `main`
+- 失败时回退到 `body.innerText`
 
-### 优点
+已知边界：
 
-- 轻量，无需额外模型依赖
-- 安装简单
-- 结果可解释
-- 多来源聚合逻辑清晰
-- 失败时能局部降级
+- 站点验证码
+- 访问验证页
+- 订阅墙
+- 某些新闻站的客户端渲染页面
 
-### 局限
+## 12. 失败与降级
 
-- `finance` / `ai` / `us-market` 的 Baidu 侧判断是启发式，不是语义理解
-- `github` 依赖 GitHub Trending 页面结构，若页面结构变化需要更新解析逻辑
-- 标题去重不是语义去重
-- Google News 的标题切分使用的是最后一个 `" - "`，极少数情况下可能误分发布方
-- 上游接口结构若变化，需要更新解析逻辑
+当某个来源失败时：
 
-## 13. 适合后续演进的方向
+- 不会让整个命令失败
+- 会把失败原因写进该 section 的 warnings
+- 如果其他来源仍然成功，结果照常返回
 
-如果以后要继续增强，建议优先考虑：
+例如：
 
-1. 引入 embedding 作为二级语义过滤器
-2. 对 `finance` / `ai` 加更细的白名单和黑名单
-3. 给 `search` 增加导出与缓存能力
-4. 增加导出 Markdown / JSON 文件能力
-5. 增加定时任务输出日报
+- 某个 Google RSS 请求超时
+- Baidu 热榜当前不可用
+- GitHub Trending 当天只解析到少量条目
+- 正文抓取命中验证页
 
----
+## 13. 为什么采用插件式结构
 
-这份文档描述的是当前仓库实现，而不是一个抽象设计草案。如果代码后续有改动，这份文档也应同步更新。
+因为这个项目的扩展点非常明确：
+
+- 新增 topic
+- 新增 source
+- 新增 filter
+- 新增 enricher
+
+当前结构让这些变化更容易做到局部修改：
+
+- 加一个 topic，优先改 `core/topics.py`
+- 加一个来源模式，优先改 `plugins/providers.py`
+- 加一个过滤后端，优先改 `plugins/filters.py`
+- 加一个增强能力，优先改 `plugins/enrichers.py`
+
+这样可以避免把所有逻辑继续堆回一个巨大的 `service.py` 里。
