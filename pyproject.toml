@@ -26,6 +26,7 @@ classifiers = [
   "Topic :: Internet :: WWW/HTTP",
 ]
 dependencies = [
+  "playwright>=1.46",
   "scikit-learn>=1.5",
   "torch>=2.2",
   "transformers>=4.41",

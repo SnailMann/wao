@@ -28,6 +28,8 @@ class OutputRenderingTests(unittest.TestCase):
                     content_label="macro",
                     content_label_name="宏观与政策",
                     content_label_score=0.84,
+                    body_text="这里是一段正文内容，用于验证输出层会把抓取到的正文一起展示出来。",
+                    body_url="https://example.com/article",
                 )
             ],
         )
@@ -37,6 +39,8 @@ class OutputRenderingTests(unittest.TestCase):
         self.assertIn("语义标签: 开启", rendered)
         self.assertIn("过滤标签 soft", rendered)
         self.assertIn("分类: 宏观与政策 0.84", rendered)
+        self.assertIn("正文:", rendered)
+        self.assertIn("正文链接: https://example.com/article", rendered)
 
 
 if __name__ == "__main__":

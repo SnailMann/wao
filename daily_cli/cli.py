@@ -64,6 +64,12 @@ def _top_level_help_epilog() -> str:
             完全关闭标签分类、标签展示和过滤。
           --semantic-model-dir PATH
             指定本地语义模型目录。
+          --fetch-body
+            对最终保留结果的链接再用 Playwright 无头模式抓取正文。
+          --body-timeout SECONDS
+            控制正文抓取超时。
+          --body-max-chars N
+            限制每条正文返回的最大字符数。
 
         预设与默认行为:
           预设:
@@ -81,6 +87,7 @@ def _top_level_help_epilog() -> str:
           daily-cli summary --filter-mode tfidf --limit 5
           daily-cli fetch us-hot china-hot --exclude-label soft
           daily-cli fetch github --limit 10 --format json
+          daily-cli fetch us-hot --fetch-body --body-max-chars 3000
           daily-cli search "人工智能" --google-locale cn
           daily-cli model download
         """
@@ -140,6 +147,23 @@ def add_common_fetch_args(parser: argparse.ArgumentParser) -> None:
         default="tfidf",
         help="标签/过滤模式；tfidf 为默认轻量模式，model 需要先下载模型。",
     )
+    parser.add_argument(
+        "--fetch-body",
+        action="store_true",
+        help="对最终保留结果的链接再用 Playwright 无头模式抓取正文。",
+    )
+    parser.add_argument(
+        "--body-timeout",
+        type=positive_float,
+        default=15.0,
+        help="正文抓取超时时间（秒）。",
+    )
+    parser.add_argument(
+        "--body-max-chars",
+        type=positive_int,
+        default=4000,
+        help="每条正文最多返回多少字符。",
+    )
 
 
 def add_search_args(parser: argparse.ArgumentParser) -> None:
@@ -188,6 +212,23 @@ def add_search_args(parser: argparse.ArgumentParser) -> None:
         choices=list_filter_backends(),
         default="tfidf",
         help="标签/过滤模式；tfidf 为默认轻量模式，model 需要先下载模型。",
+    )
+    parser.add_argument(
+        "--fetch-body",
+        action="store_true",
+        help="对最终保留结果的链接再用 Playwright 无头模式抓取正文。",
+    )
+    parser.add_argument(
+        "--body-timeout",
+        type=positive_float,
+        default=15.0,
+        help="正文抓取超时时间（秒）。",
+    )
+    parser.add_argument(
+        "--body-max-chars",
+        type=positive_int,
+        default=4000,
+        help="每条正文最多返回多少字符。",
     )
 
 
@@ -366,6 +407,9 @@ def main(argv: list[str] | None = None) -> int:
                 excluded_labels=tuple(args.exclude_label) if args.exclude_label else None,
                 semantic_model_dir=args.semantic_model_dir,
                 filter_mode=args.filter_mode,
+                fetch_body=args.fetch_body,
+                body_timeout=args.body_timeout,
+                body_max_chars=args.body_max_chars,
             )
             print(emit_output(args.format, sections), end="")
             return 0
@@ -381,6 +425,9 @@ def main(argv: list[str] | None = None) -> int:
                 excluded_labels=tuple(args.exclude_label) if args.exclude_label else None,
                 semantic_model_dir=args.semantic_model_dir,
                 filter_mode=args.filter_mode,
+                fetch_body=args.fetch_body,
+                body_timeout=args.body_timeout,
+                body_max_chars=args.body_max_chars,
             )
             print(emit_output(args.format, sections), end="")
             return 0
@@ -396,6 +443,9 @@ def main(argv: list[str] | None = None) -> int:
                 excluded_labels=tuple(args.exclude_label) if args.exclude_label else None,
                 semantic_model_dir=args.semantic_model_dir,
                 filter_mode=args.filter_mode,
+                fetch_body=args.fetch_body,
+                body_timeout=args.body_timeout,
+                body_max_chars=args.body_max_chars,
             )
             print(emit_output(args.format, [section]), end="")
             return 0

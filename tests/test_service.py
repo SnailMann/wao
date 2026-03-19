@@ -297,6 +297,54 @@ class SemanticFilterTests(unittest.TestCase):
         self.assertEqual(section.filtered_count, 2)
         mocked_google_news_top.assert_called_once()
 
+    @patch("daily_cli.service.fetch_item_bodies")
+    @patch("daily_cli.service.fetch_google_trends_us")
+    @patch("daily_cli.service.get_semantic_labeler")
+    def test_body_fetch_only_runs_on_final_kept_items(
+        self,
+        mocked_labeler,
+        mocked_google_trends,
+        mocked_fetch_bodies,
+    ) -> None:
+        labeler = UsHotRefillLabeler()
+        mocked_labeler.return_value = labeler
+        mocked_google_trends.return_value = [
+            NewsItem(
+                title="niall horan",
+                category="us-hot",
+                provider="google",
+                feed="Google Trends",
+                link="https://example.com/niall",
+            ),
+            NewsItem(
+                title="denver airport",
+                summary="Power outage impacts train service to gates.",
+                category="us-hot",
+                provider="google",
+                feed="Google Trends",
+                link="https://example.com/airport",
+            ),
+        ]
+
+        section = collect_presets(
+            ["us-hot"],
+            source="google",
+            limit=1,
+            timeout=1.0,
+            semantic_enabled=True,
+            semantic_filter=True,
+            fetch_body=True,
+            body_timeout=3.0,
+            body_max_chars=1000,
+        )[0]
+
+        self.assertEqual([item.title for item in section.items], ["denver airport"])
+        mocked_fetch_bodies.assert_called_once()
+        body_items = mocked_fetch_bodies.call_args.args[0]
+        self.assertEqual([item.title for item in body_items], ["denver airport"])
+        self.assertEqual(mocked_fetch_bodies.call_args.kwargs["timeout"], 3.0)
+        self.assertEqual(mocked_fetch_bodies.call_args.kwargs["max_chars"], 1000)
+
     @patch("daily_cli.service.fetch_google_news_top")
     @patch("daily_cli.service.fetch_google_trends_us")
     @patch("daily_cli.service.get_semantic_labeler")

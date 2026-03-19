@@ -350,6 +350,30 @@ Google 侧：
 - 先保留 Google Trends 中未被过滤的条目
 - 如果还不够 `limit`，再按 Google News Top Stories 的原始顺序追加回补条目
 
+## 6. 正文抓取是怎么做的
+
+这是一个可选功能，只有显式传入 `--fetch-body` 才会启用。
+
+执行时机：
+
+- 先完成抓取
+- 再完成标签过滤
+- 如果是 `us-hot`，先做 Google News Top Stories 回补
+- 最后只对“最终保留结果”的链接抓正文
+
+实现方式：
+
+- 使用 Playwright Chromium 无头模式
+- Google News RSS 跳转链接会先等待重定向到真实文章页
+- 百度搜索页会优先尝试打开首条结果页
+- 之后从 `article / main / body` 等候选节点中抽取最长正文文本
+
+限制：
+
+- `github` 预设暂不抓正文
+- 个别站点会出现验证码、反爬或拒绝访问，此时会在结果里返回正文抓取失败原因
+- 抓取正文会显著增加响应时间，因此默认关闭
+
 ## 5.2 百度专题混合时
 
 对于 `ai` / `finance` / `us-market` 的 Baidu 侧，排序规则是：

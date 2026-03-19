@@ -25,6 +25,9 @@ class NewsItem:
     content_label: str = ""
     content_label_name: str = ""
     content_label_score: float = 0.0
+    body_text: str = ""
+    body_url: str = ""
+    body_error: str = ""
     tags: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:

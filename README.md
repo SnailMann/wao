@@ -30,6 +30,11 @@ daily-cli model download
 ```
 
 如果你只打算使用 `--filter-mode tfidf`，可以不下载模型。
+如果你要使用 `--fetch-body` 抓取正文，还需要额外安装 Playwright Chromium：
+
+```bash
+python3 -m playwright install chromium
+```
 
 安装后可直接使用：
 
@@ -97,6 +102,9 @@ daily-cli presets
 --exclude-label soft
 --semantic-model-dir /path/to/model
 --filter-mode model|tfidf
+--fetch-body
+--body-timeout 15
+--body-max-chars 4000
 ```
 
 说明：
@@ -119,6 +127,7 @@ daily-cli presets
 - 如果关闭过滤，使用 `--no-filter`，此时也不会做额外抓取或分类
 - 如果想完全关闭语义能力，使用 `--no-semantic`
 - 如果想切到轻量过滤器，使用 `--filter-mode tfidf`
+- 如果想对最终保留结果继续抓正文，使用 `--fetch-body`
 
 `search` 命令还支持：
 
@@ -136,6 +145,7 @@ daily-cli summary --filter-mode tfidf
 daily-cli fetch ai finance --source all
 daily-cli fetch china-hot --exclude-label soft --exclude-label public
 daily-cli fetch github --limit 10
+daily-cli fetch us-hot --fetch-body --body-max-chars 3000
 daily-cli fetch china-hot --format json
 daily-cli search "Federal Reserve" --google-locale us
 daily-cli search "人工智能"
@@ -152,6 +162,8 @@ daily-cli search "人工智能"
 - 默认后端为 `tfidf`，也支持 `model` 后端。
 - `tfidf` 后端内部使用 `TF-IDF + LogisticRegression + 少量词表` 的混合分类，训练语料由 `model` 伪标注样本和少量补充合成样本组成。
 - 默认仅 `us-hot` / `china-hot` 过滤 `soft`，其他预设默认既不拦截，也不启动分类。
+- `--fetch-body` 会在过滤和回补完成后，针对最终保留结果的链接，用 Playwright 无头模式抓取正文。
+- `github` 预设暂不抓正文。
 - Baidu 普通网页搜索较容易触发验证码，因此没有把它作为核心依赖接口。
 
 更详细的类别、来源、排序和降级逻辑说明见：

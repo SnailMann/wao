@@ -68,6 +68,12 @@ def render_text(sections: list[SectionResult]) -> str:
 
             if item.summary:
                 lines.append("   " + _shorten(item.summary))
+            if item.body_text:
+                lines.append("   正文: " + item.body_text)
+            elif item.body_error:
+                lines.append("   正文抓取: " + item.body_error)
+            if item.body_url and item.body_url != item.link:
+                lines.append("   正文链接: " + item.body_url)
             if item.link:
                 lines.append("   " + item.link)
 

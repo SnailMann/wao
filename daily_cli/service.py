@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .body_fetch import BodyFetchError, fetch_item_bodies
 from .models import NewsItem, SectionResult
 from .semantic import (
     DEFAULT_EXCLUDED_LABELS,
@@ -486,6 +487,32 @@ def _finalize_section(
     return section
 
 
+def _enrich_sections_with_bodies(
+    sections: list[SectionResult],
+    body_timeout: float,
+    body_max_chars: int,
+) -> None:
+    for section in sections:
+        if not section.items:
+            continue
+        if section.key == "github":
+            section.warnings.append("GitHub Trending 暂不抓取正文。")
+            continue
+
+        eligible_items = [item for item in section.items if item.link]
+        if not eligible_items:
+            continue
+
+        try:
+            fetch_item_bodies(
+                eligible_items,
+                timeout=body_timeout,
+                max_chars=body_max_chars,
+            )
+        except BodyFetchError as exc:
+            section.warnings.append(str(exc))
+
+
 def collect_presets(
     keys: list[str] | tuple[str, ...],
     source: str,
@@ -496,6 +523,9 @@ def collect_presets(
     excluded_labels: tuple[str, ...] | None = None,
     semantic_model_dir: str | None = None,
     filter_mode: str = "tfidf",
+    fetch_body: bool = False,
+    body_timeout: float = 15.0,
+    body_max_chars: int = 4000,
 ) -> list[SectionResult]:
     if not keys:
         return []
@@ -520,7 +550,7 @@ def collect_presets(
             filter_mode=filter_mode,
         )
 
-    return [
+    sections = [
         _finalize_section(
             prepared,
             prepared.section,
@@ -530,6 +560,13 @@ def collect_presets(
         )
         for prepared in prepared_sections
     ]
+    if fetch_body:
+        _enrich_sections_with_bodies(
+            sections,
+            body_timeout=body_timeout,
+            body_max_chars=body_max_chars,
+        )
+    return sections
 
 
 def collect_preset(
@@ -542,6 +579,9 @@ def collect_preset(
     excluded_labels: tuple[str, ...] | None = None,
     semantic_model_dir: str | None = None,
     filter_mode: str = "tfidf",
+    fetch_body: bool = False,
+    body_timeout: float = 15.0,
+    body_max_chars: int = 4000,
 ) -> SectionResult:
     return collect_presets(
         [key],
@@ -553,6 +593,9 @@ def collect_preset(
         excluded_labels=excluded_labels,
         semantic_model_dir=semantic_model_dir,
         filter_mode=filter_mode,
+        fetch_body=fetch_body,
+        body_timeout=body_timeout,
+        body_max_chars=body_max_chars,
     )[0]
 
 
@@ -565,6 +608,9 @@ def collect_summary(
     excluded_labels: tuple[str, ...] | None = None,
     semantic_model_dir: str | None = None,
     filter_mode: str = "tfidf",
+    fetch_body: bool = False,
+    body_timeout: float = 15.0,
+    body_max_chars: int = 4000,
 ) -> list[SectionResult]:
     return collect_presets(
         list(DEFAULT_SUMMARY_PRESETS),
@@ -576,6 +622,9 @@ def collect_summary(
         excluded_labels=excluded_labels,
         semantic_model_dir=semantic_model_dir,
         filter_mode=filter_mode,
+        fetch_body=fetch_body,
+        body_timeout=body_timeout,
+        body_max_chars=body_max_chars,
     )
 
 
@@ -589,6 +638,9 @@ def collect_search(
     excluded_labels: tuple[str, ...] | None = None,
     semantic_model_dir: str | None = None,
     filter_mode: str = "tfidf",
+    fetch_body: bool = False,
+    body_timeout: float = 15.0,
+    body_max_chars: int = 4000,
 ) -> SectionResult:
     if google_locale == "auto":
         google_locale = "cn" if contains_cjk(query) else "us"
@@ -639,10 +691,17 @@ def collect_search(
             filter_mode=filter_mode,
         )
 
-    return _finalize_section(
+    section = _finalize_section(
         prepared,
         section,
         timeout=timeout,
         semantic_model_dir=semantic_model_dir,
         filter_mode=filter_mode,
     )
+    if fetch_body:
+        _enrich_sections_with_bodies(
+            [section],
+            body_timeout=body_timeout,
+            body_max_chars=body_max_chars,
+        )
+    return section
