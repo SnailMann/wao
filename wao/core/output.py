@@ -5,13 +5,6 @@ import json
 from .models import SectionResult
 
 
-def _shorten(value: str, limit: int = 160) -> str:
-    value = (value or "").strip()
-    if len(value) <= limit:
-        return value
-    return value[: limit - 3].rstrip() + "..."
-
-
 def render_text(sections: list[SectionResult]) -> str:
     lines: list[str] = []
     if sections:
@@ -67,7 +60,7 @@ def render_text(sections: list[SectionResult]) -> str:
             lines.append("   " + " | ".join(meta_parts))
 
             if item.summary:
-                lines.append("   " + _shorten(item.summary))
+                lines.append("   " + item.summary.strip())
             if item.body_text:
                 lines.append("   正文: " + item.body_text)
             elif item.body_error:

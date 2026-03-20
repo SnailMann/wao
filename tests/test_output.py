@@ -42,6 +42,32 @@ class OutputRenderingTests(unittest.TestCase):
         self.assertIn("正文:", rendered)
         self.assertIn("正文链接: https://example.com/article", rendered)
 
+    def test_render_text_keeps_full_summary(self) -> None:
+        long_summary = (
+            "This is a deliberately long summary used to verify that text rendering keeps the entire "
+            "payload intact instead of truncating it with an ellipsis in the default terminal output."
+        )
+        section = SectionResult(
+            key="search",
+            label='自定义查询: "ai make game"',
+            requested_source="x",
+            resolved_sources=["x"],
+            generated_at="2026-03-20 20:00:00 CST",
+            items=[
+                NewsItem(
+                    title="A complete item title",
+                    category="search",
+                    provider="x",
+                    feed="X Search",
+                    summary=long_summary,
+                )
+            ],
+        )
+
+        rendered = render_text([section])
+
+        self.assertIn(long_summary, rendered)
+
 
 if __name__ == "__main__":
     unittest.main()

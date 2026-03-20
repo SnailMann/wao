@@ -86,7 +86,8 @@ class XApiTests(unittest.TestCase):
         self.assertEqual(items[0].published_at, "2026-03-19 10:30:00 CST")
         self.assertEqual(items[0].language, "en")
         self.assertIn("赞 120", items[0].tags)
-        self.assertIn("Starship update", items[0].title)
+        self.assertEqual(items[0].title, "Starship update: next integrated flight test window opens soon.")
+        self.assertEqual(items[0].summary, "")
 
     @patch("wao.fetchers.x._fetch_x_json")
     def test_fetch_x_recent_search(self, mocked_fetch_x_json) -> None:
@@ -124,6 +125,8 @@ class XApiTests(unittest.TestCase):
         self.assertEqual(items[0].publisher, "X Dev (@xdev)")
         self.assertEqual(items[0].search_query, "OpenAI")
         self.assertIn("/status/1900000000000000020", items[0].link)
+        self.assertEqual(items[0].title, "OpenAI ships a new multimodal release today.")
+        self.assertEqual(items[0].summary, "")
 
     @patch("wao.fetchers.x._fetch_x_json")
     def test_fetch_x_news_search(self, mocked_fetch_x_json) -> None:

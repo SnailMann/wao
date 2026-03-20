@@ -106,9 +106,7 @@ def _tweet_title_and_summary(text: str) -> tuple[str, str]:
     cleaned = " ".join((text or "").split()).strip()
     if not cleaned:
         return "", ""
-    if len(cleaned) <= 110:
-        return cleaned, ""
-    return cleaned[:107].rstrip() + "...", cleaned
+    return cleaned, ""
 
 
 def _strip_x_html(value: str) -> str:
