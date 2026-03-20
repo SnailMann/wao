@@ -1,21 +1,21 @@
-# daily News Pipeline
+# wao / 哇哦 Pipeline
 
-本文档说明 `daily` 当前如何从原子能力拼出业务结果，以及数据源、排序、过滤和回补是怎么工作的。
+本文档说明 `wao` 当前如何从原子能力拼出业务结果，以及数据源、排序、过滤和回补是怎么工作的。
 
 ## 1. 两层模型
 
 ### 原子能力层
 
-- `daily trend`
-- `daily search`
-- `daily rss`
+- `wao trend`
+- `wao search`
+- `wao rss`
 
 这些命令只负责“标准化获取信息”。
 
 ### 组合业务层
 
-- `daily summary`
-- `daily fetch`
+- `wao summary`
+- `wao fetch`
 
 这些命令只负责“把若干来源和默认规则组织成业务 topic”。
 
@@ -32,7 +32,7 @@
 - `github`
   - GitHub Trending
 
-`daily trend --source all` 会输出多个 section，不做强行混排。
+`wao trend --source all` 会输出多个 section，不做强行混排。
 
 ### 2.2 search
 
@@ -47,7 +47,7 @@
 - `x-news`
   - X news search
 
-`daily search --source all` 会把：
+`wao search --source all` 会把：
 
 - `google`
 - `x`
@@ -64,9 +64,9 @@
 
 它既支持一次性抓取，也支持保存后批量拉取：
 
-- `daily rss fetch ...`
-- `daily rss add ...`
-- `daily rss pull`
+- `wao rss fetch ...`
+- `wao rss add ...`
+- `wao rss pull`
 
 ## 3. 当前业务 Topic
 
@@ -99,7 +99,7 @@ https://trends.google.com/trending/rss?geo=US
 
 用于：
 
-- `daily trend --source google`
+- `wao trend --source google`
 - `us-hot`
 
 ### 4.2 Google News
@@ -113,7 +113,7 @@ https://news.google.com/rss?hl=...&gl=...&ceid=...
 
 用于：
 
-- `daily search --source google`
+- `wao search --source google`
 - `ai`
 - `finance`
 - `us-market`
@@ -129,7 +129,7 @@ https://top.baidu.com/board?tab=realtime
 
 用于：
 
-- `daily trend --source baidu`
+- `wao trend --source baidu`
 - `china-hot`
 - `ai` / `finance` / `us-market` 的关键词过滤补充
 
@@ -143,7 +143,7 @@ https://github.com/trending
 
 用于：
 
-- `daily trend --source github`
+- `wao trend --source github`
 - `github`
 
 ### 4.5 X API
@@ -159,15 +159,15 @@ GET /2/news/search
 
 用于：
 
-- `daily search --source x`
-- `daily search --source x-user`
-- `daily search --source x-news`
+- `wao search --source x`
+- `wao search --source x-user`
+- `wao search --source x-news`
 
 ### 4.6 RSSHub / RSS / Atom
 
 用于：
 
-- `daily rss`
+- `wao rss`
 
 当前支持：
 
@@ -211,9 +211,9 @@ GET /2/news/search
 
 这些内容默认只抓取，不自动过滤：
 
-- `daily trend`
-- `daily search`
-- `daily rss`
+- `wao trend`
+- `wao search`
+- `wao rss`
 - `ai`
 - `finance`
 - `us-market`
@@ -288,16 +288,16 @@ Fetcher 负责“从哪取、怎么取正文”。
 ## 10. 代码对应关系
 
 - 原子公共入口：
-  - `daily_cli/tools/search.py`
-  - `daily_cli/tools/trend.py`
-  - `daily_cli/tools/rss.py`
+  - `wao/service/search.py`
+  - `wao/service/trend.py`
+  - `wao/service/rss.py`
 - collector 门面：
-  - `daily_cli/core/collector.py`
+  - `wao/service/collector.py`
 - 业务 topic 定义：
-  - `daily_cli/core/topics.py`
+  - `wao/service/topics.py`
+- 核心基础能力：
+  - `wao/core/`
 - 过滤插件：
-  - `daily_cli/plugins/`
+  - `wao/plugins/`
 - 数据抓取与正文抓取：
-  - `daily_cli/fetchers/`
-- 通用配置与输出：
-  - `daily_cli/common/`
+  - `wao/fetchers/`

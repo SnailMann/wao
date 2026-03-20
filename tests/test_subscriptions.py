@@ -5,14 +5,14 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from daily_cli.core.subscriptions import (
+from wao.service.subscriptions import (
     add_subscription,
     build_preview_topic,
     build_subscription_topic,
     load_subscriptions,
     remove_subscription,
 )
-from daily_cli.fetchers.rss import parse_feed_url, parse_generic_feed, parse_rsshub_uri
+from wao.fetchers.rss import parse_feed_url, parse_generic_feed, parse_rsshub_uri
 
 
 RSSHUB_SAMPLE = """\

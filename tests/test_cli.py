@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from daily_cli.cli import build_parser
+from wao.cli import build_parser
 
 
 class CliParserTests(unittest.TestCase):
@@ -23,7 +23,7 @@ class CliParserTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             build_parser().parse_args(["summary", "--filter-backend", "tfidf"])
 
-    def test_top_level_help_mentions_topics_and_daily_command(self) -> None:
+    def test_top_level_help_mentions_topics_and_wao_command(self) -> None:
         help_text = build_parser().format_help()
         self.assertIn("us-hot, china-hot, ai, finance, us-market, github", help_text)
         self.assertIn("默认仅 us-hot / china-hot 过滤 soft", help_text)
@@ -34,14 +34,14 @@ class CliParserTests(unittest.TestCase):
         self.assertIn("--fetch-body", help_text)
         self.assertIn("trend", help_text)
         self.assertIn("rss", help_text)
-        self.assertIn("daily summary", help_text)
+        self.assertIn("wao summary", help_text)
         self.assertIn("topics", help_text)
-        self.assertIn("daily x login", help_text)
-        self.assertIn("daily trend", help_text)
-        self.assertIn("daily rss fetch https://36kr.com/feed", help_text)
-        self.assertIn("daily search \"OpenAI\" --source x", help_text)
-        self.assertIn("daily search elonmusk --source x-user", help_text)
-        self.assertNotIn("daily x fetch", help_text)
+        self.assertIn("wao x login", help_text)
+        self.assertIn("wao trend", help_text)
+        self.assertIn("wao rss fetch https://36kr.com/feed", help_text)
+        self.assertIn("wao search \"OpenAI\" --source x", help_text)
+        self.assertIn("wao search elonmusk --source x-user", help_text)
+        self.assertNotIn("wao x fetch", help_text)
 
     def test_topics_command_exists(self) -> None:
         args = build_parser().parse_args(["topics"])

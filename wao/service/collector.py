@@ -8,7 +8,7 @@ from ..fetchers.body import enrich_sections_with_body
 from ..fetchers.common import FetchError, contains_cjk, local_now_string, normalize_title
 from ..fetchers.registry import dedupe_source_items, fetch_source_plan
 from ..plugins.filters import annotate_items, get_filter_plugin
-from .models import NewsItem, SectionResult
+from ..core.models import NewsItem, SectionResult
 from .topics import (
     DEFAULT_SUMMARY_TOPICS,
     SEARCH_DEFAULT_SOURCE,

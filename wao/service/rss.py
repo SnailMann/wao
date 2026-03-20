@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-"""Public RSS helpers and saved subscription management."""
+"""Service-level RSS capability and saved subscription management."""
 
-from ..core.collector import collect_topic_specs
-from ..core.subscriptions import (
+from .collector import collect_topic_specs
+from .subscriptions import (
     SubscriptionSpec,
     add_subscription,
     build_preview_topic,
@@ -77,6 +77,7 @@ def pull_saved_rss(
         body_timeout=body_timeout,
         body_max_chars=body_max_chars,
     )
+
 
 __all__ = [
     "SubscriptionSpec",

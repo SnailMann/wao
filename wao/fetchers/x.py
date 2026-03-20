@@ -37,7 +37,7 @@ def _decode_x_error(exc: HTTPError, endpoint: str) -> FetchError:
             f" 官方返回: {detail or 'CreditsDepleted'}"
         )
     if exc.code == 401:
-        return FetchError("X Bearer Token 无效或已过期，请重新运行 `daily x login`")
+        return FetchError("X Bearer Token 无效或已过期，请重新运行 `wao x login`")
     if exc.code == 403:
         return FetchError(
             "当前 X 应用权限不足，无法访问该接口。"

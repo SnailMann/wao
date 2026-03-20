@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-"""Public trend helpers built on the shared collector."""
+"""Service-level trend capability built on the shared collector."""
 
-from ..core.collector import collect_topic_specs
 from ..core.specs import CollectionSpec, SourcePlan
+from .collector import collect_topic_specs
 
 TREND_SOURCE_CHOICES = ("auto", "google", "baidu", "github", "all")
 
@@ -85,6 +85,7 @@ def collect_trends(
         body_timeout=body_timeout,
         body_max_chars=body_max_chars,
     )
+
 
 __all__ = [
     "TREND_SOURCE_CHOICES",

@@ -4,9 +4,9 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 import re
 
-from ..common.config import default_config_dir, read_json_file, write_json_file
+from ..core.config import config_file, existing_config_file, read_json_file, write_json_file
 from ..fetchers.rss import parse_feed_url, parse_rsshub_uri
-from .specs import CollectionSpec, SourcePlan, TopicSpec
+from ..core.specs import CollectionSpec, SourcePlan, TopicSpec
 
 
 @dataclass(frozen=True)
@@ -41,11 +41,11 @@ def _slugify(value: str) -> str:
 
 
 def subscriptions_file() -> Path:
-    return default_config_dir() / "subscriptions.json"
+    return config_file("subscriptions.json")
 
 
 def _read_payload() -> list[dict[str, str]]:
-    return read_json_file(subscriptions_file(), default=[])
+    return read_json_file(existing_config_file("subscriptions.json"), default=[])
 
 
 def _write_payload(items: list[dict[str, str]]) -> None:

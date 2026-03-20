@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from daily_cli.tools.trend import TREND_SOURCE_CHOICES, list_trend_specs
+from wao.service.trend import TREND_SOURCE_CHOICES, list_trend_specs
 
 
 class AtomicApiTests(unittest.TestCase):

@@ -3,7 +3,7 @@ from __future__ import annotations
 """Business topic registry and dynamic search topic builders."""
 
 from ..plugins.semantic import DEFAULT_EXCLUDED_LABELS
-from .specs import CollectionSpec, SourcePlan, TopicSpec
+from ..core.specs import CollectionSpec, SourcePlan, TopicSpec
 
 AI_GOOGLE_QUERY = 'AI OR "artificial intelligence" OR OpenAI OR Anthropic OR Gemini OR Nvidia'
 FINANCE_GOOGLE_QUERY = (
@@ -159,7 +159,7 @@ def build_search_topic(query: str, locale: str, source: str = "auto") -> TopicSp
     if source == "x-user":
         normalized_user = query.strip().lstrip("@")
         if not normalized_user:
-            raise ValueError("`daily search --source x-user` 需要传入用户名，例如 `daily search elonmusk --source x-user`")
+            raise ValueError("`wao search --source x-user` 需要传入用户名，例如 `wao search elonmusk --source x-user`")
         return CollectionSpec(
             key="search",
             label=f'X 用户发推: "@{normalized_user}"',

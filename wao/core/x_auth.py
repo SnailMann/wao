@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 
-from ..common.config import config_file, read_json_file, write_json_file
+from .config import config_file, existing_config_file, read_json_file, write_json_file
 
 X_TOKEN_ENV_VARS = ("X_BEARER_TOKEN", "TWITTER_BEARER_TOKEN")
 
@@ -35,7 +35,7 @@ def save_x_bearer_token(token: str) -> XTokenState:
 
 
 def load_saved_x_bearer_token() -> XTokenState | None:
-    path = x_token_file()
+    path = existing_config_file("x_token.json")
     payload = read_json_file(path, default=None)
     if not payload:
         return None
@@ -46,11 +46,13 @@ def load_saved_x_bearer_token() -> XTokenState | None:
 
 
 def clear_saved_x_bearer_token() -> bool:
-    path = x_token_file()
-    if not path.exists():
-        return False
-    path.unlink()
-    return True
+    removed = False
+    for path in {x_token_file(), existing_config_file("x_token.json")}:
+        if not path.exists():
+            continue
+        path.unlink()
+        removed = True
+    return removed
 
 
 def resolve_x_bearer_token() -> XTokenState:
@@ -63,4 +65,4 @@ def resolve_x_bearer_token() -> XTokenState:
     if saved is not None:
         return saved
 
-    raise ValueError("未配置 X Bearer Token，请先运行 `daily x login` 或设置 X_BEARER_TOKEN")
+    raise ValueError("未配置 X Bearer Token，请先运行 `wao x login` 或设置 X_BEARER_TOKEN")

@@ -17,8 +17,8 @@ from urllib.request import Request, urlopen
 MODEL_REPO_ID = "intfloat/multilingual-e5-small"
 MODEL_CACHE_DIRNAME = "intfloat__multilingual-e5-small"
 TFIDF_BACKEND_ID = "tfidf-lexicon"
-APP_CACHE_DIRNAME = "daily"
-LEGACY_APP_CACHE_DIRNAME = "daily-cli"
+APP_CACHE_DIRNAME = "wao"
+LEGACY_APP_CACHE_DIRNAMES = ("daily", "daily-cli")
 REQUIRED_MODEL_FILES = (
     "config.json",
     "model.safetensors",
@@ -652,8 +652,11 @@ def default_model_dir() -> Path:
     return Path.home() / ".cache" / APP_CACHE_DIRNAME / "models" / MODEL_CACHE_DIRNAME
 
 
-def legacy_model_dir() -> Path:
-    return Path.home() / ".cache" / LEGACY_APP_CACHE_DIRNAME / "models" / MODEL_CACHE_DIRNAME
+def legacy_model_dirs() -> tuple[Path, ...]:
+    return tuple(
+        Path.home() / ".cache" / dirname / "models" / MODEL_CACHE_DIRNAME
+        for dirname in LEGACY_APP_CACHE_DIRNAMES
+    )
 
 
 def resolve_default_model_dir(model_dir: str | None = None) -> Path:
@@ -664,9 +667,9 @@ def resolve_default_model_dir(model_dir: str | None = None) -> Path:
     if preferred.exists():
         return preferred
 
-    legacy = legacy_model_dir()
-    if legacy.exists():
-        return legacy
+    for legacy in legacy_model_dirs():
+        if legacy.exists():
+            return legacy
 
     return preferred
 
@@ -737,7 +740,7 @@ def _download_file(file_name: str, destination: Path) -> None:
         except subprocess.CalledProcessError as exc:
             raise SemanticError(f"下载模型文件失败: {file_name} curl 退出码 {exc.returncode}") from exc
 
-    headers = {"User-Agent": "daily/0.2"}
+    headers = {"User-Agent": "wao/0.2"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
     request = Request(url, headers=headers)
@@ -763,7 +766,7 @@ def ensure_model_downloaded(model_dir: str | None = None) -> str:
     if missing:
         joined = ", ".join(missing)
         raise SemanticError(
-            "语义模型尚未准备好，请先运行 `daily model download`。"
+            "语义模型尚未准备好，请先运行 `wao model download`。"
             f" 当前目录缺少: {joined}"
         )
     return str(target_dir)

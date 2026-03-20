@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from daily_cli.common.output import render_text
-from daily_cli.core.models import NewsItem, SectionResult
+from wao.core.output import render_text
+from wao.core.models import NewsItem, SectionResult
 
 
 class OutputRenderingTests(unittest.TestCase):

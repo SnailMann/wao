@@ -1,6 +1,6 @@
-# daily
+# wao / 哇哦
 
-`daily` 是一个面向 Linux / macOS 的资讯 CLI。它把能力分成两层：
+`wao`（中文名：`哇哦`）是一个面向 Linux / macOS 的资讯 CLI。它把能力分成两层：
 
 - 原子能力层：`trend`、`search`、`rss`
 - 组合业务层：`summary`、`fetch`
@@ -11,23 +11,23 @@
 
 ### 原子能力
 
-- `daily trend`
+- `wao trend`
   - 统一查看热榜源
   - 当前支持 `google`、`baidu`、`github`
-- `daily search`
+- `wao search`
   - 统一做检索
   - 当前支持 `google`、`x`、`x-user`、`x-news`
-- `daily rss`
+- `wao rss`
   - 统一处理 RSSHub 与普通 RSS/Atom
   - 支持一次性抓取，也支持保存后批量拉取
 
 ### 组合业务
 
-- `daily summary`
+- `wao summary`
   - 输出默认 dashboard
-- `daily fetch <topic ...>`
+- `wao fetch <topic ...>`
   - 获取一个或多个业务 topic
-- `daily topics`
+- `wao topics`
   - 查看业务 topic 定义
 
 ### 插件能力
@@ -71,7 +71,7 @@ python3 -m pip install .
 
 ```bash
 python3 -m pip install '.[model]'
-daily model download
+wao model download
 ```
 
 如果你需要正文抓取：
@@ -86,40 +86,40 @@ python3 -m playwright install chromium
 ```bash
 python3 -m pip install '.[all]'
 python3 -m playwright install chromium
-daily model download
+wao model download
 ```
 
 ## 快速开始
 
 ```bash
-daily trend
-daily trend --source baidu --limit 20
+wao trend
+wao trend --source baidu --limit 20
 
-daily search "OpenAI"
-daily search "OpenAI" --source x
-daily search elonmusk --source x-user
+wao search "OpenAI"
+wao search "OpenAI" --source x
+wao search elonmusk --source x-user
 
-daily rss fetch https://36kr.com/feed
-daily rss add rsshub://twitter/user/elonmusk --name Elon
-daily rss pull
+wao rss fetch https://36kr.com/feed
+wao rss add rsshub://twitter/user/elonmusk --name Elon
+wao rss pull
 
-daily summary
-daily fetch us-hot china-hot
+wao summary
+wao fetch us-hot china-hot
 
-daily x login
+wao x login
 ```
 
 ## 命令说明
 
-### `daily trend`
+### `wao trend`
 
 统一查看热榜源。
 
 ```bash
-daily trend
-daily trend --source google
-daily trend --source baidu --limit 20
-daily trend --source all --format json
+wao trend
+wao trend --source google
+wao trend --source baidu --limit 20
+wao trend --source all --format json
 ```
 
 支持来源：
@@ -131,16 +131,16 @@ daily trend --source all --format json
 
 默认 `auto=all`。
 
-### `daily search`
+### `wao search`
 
 统一检索新闻、帖子与 X 用户公开发推。
 
 ```bash
-daily search "人工智能"
-daily search "OpenAI" --source x
-daily search elonmusk --source x-user
-daily search "AI" --source x-news
-daily search "Federal Reserve" --fetch-body
+wao search "人工智能"
+wao search "OpenAI" --source x
+wao search elonmusk --source x-user
+wao search "AI" --source x-news
+wao search "Federal Reserve" --fetch-body
 ```
 
 支持来源：
@@ -158,25 +158,25 @@ daily search "Federal Reserve" --fetch-body
 - `--source x-news` 使用 X news search
 - `--source all` 会把 `google + x + x-news` 轮询混排并去重
 
-### `daily rss`
+### `wao rss`
 
 统一处理 RSSHub 与普通 RSS/Atom。
 
 一次性抓取：
 
 ```bash
-daily rss fetch rsshub://twitter/user/elonmusk
-daily rss fetch https://36kr.com/feed
+wao rss fetch rsshub://twitter/user/elonmusk
+wao rss fetch https://36kr.com/feed
 ```
 
 保存与拉取：
 
 ```bash
-daily rss add rsshub://twitter/user/elonmusk --name Elon
-daily rss add https://36kr.com/feed --name 36kr
-daily rss list
-daily rss pull
-daily rss remove twitter-user-elonmusk-xxxx
+wao rss add rsshub://twitter/user/elonmusk --name Elon
+wao rss add https://36kr.com/feed --name 36kr
+wao rss list
+wao rss pull
+wao rss remove twitter-user-elonmusk-xxxx
 ```
 
 说明：
@@ -184,47 +184,47 @@ daily rss remove twitter-user-elonmusk-xxxx
 - `rsshub://twitter/user/elonmusk` 会被解析成 RSSHub 路由 `/twitter/user/elonmusk`
 - 普通 RSS/Atom 直接使用公开 URL
 - 默认实例是 `https://rsshub.app`
-- 保存的订阅默认写到 `~/.config/daily/subscriptions.json`
+- 保存的订阅默认写到 `~/.config/wao/subscriptions.json`
 - `subscriptions` 被收进 `rss` 命令下，因为它本质上是 feed 的保存与拉取，不是独立业务域
 
-### `daily x`
+### `wao x`
 
 只负责配置 X Bearer Token。
 
 ```bash
-daily x login
-daily x status
-daily x logout
+wao x login
+wao x status
+wao x logout
 ```
 
-### `daily summary`
+### `wao summary`
 
 输出默认 dashboard。
 
 ```bash
-daily summary
-daily summary --filter-mode model
-daily summary --fetch-body
+wao summary
+wao summary --filter-mode model
+wao summary --fetch-body
 ```
 
-### `daily fetch`
+### `wao fetch`
 
 获取一个或多个业务 topic。
 
 ```bash
-daily fetch us-hot
-daily fetch china-hot ai finance
-daily fetch us-market --source all --limit 8
-daily fetch github --limit 10 --format json
+wao fetch us-hot
+wao fetch china-hot ai finance
+wao fetch us-market --source all --limit 8
+wao fetch github --limit 10 --format json
 ```
 
-### `daily topics`
+### `wao topics`
 
 查看业务 topic 注册表。
 
 ```bash
-daily topics
-daily topics --format json
+wao topics
+wao topics --format json
 ```
 
 ## 过滤与正文增强
@@ -241,7 +241,7 @@ daily topics --format json
   - `TF-IDF + LogisticRegression + 少量词表`
 - `model`
   - `intfloat/multilingual-e5-small`
-  - 需要先执行 `daily model download`
+  - 需要先执行 `wao model download`
 
 正文增强：
 
@@ -254,9 +254,9 @@ daily topics --format json
 原子能力也可以直接从 Python 调用：
 
 ```python
-from daily_cli.tools.search import collect_search
-from daily_cli.tools.trend import collect_trends
-from daily_cli.tools.rss import collect_rss
+from wao.service.search import collect_search
+from wao.service.trend import collect_trends
+from wao.service.rss import collect_rss
 ```
 
 组合能力可以继续通过业务 topic 来复用。
@@ -264,21 +264,32 @@ from daily_cli.tools.rss import collect_rss
 ## 项目结构
 
 ```text
-daily_cli/
+wao/
   __main__.py
   cli/
-    main.py
-  core/
-    collector.py
-    models.py
-    specs.py
+    cli.py
+    args.py
     topics.py
-    subscriptions.py
-    x_auth.py
-  tools/
+    trend.py
+    summary.py
+    fetch.py
+    search.py
+    x.py
+    rss.py
+    model.py
+  service/
+    collector.py
+    topics.py
     search.py
     trend.py
     rss.py
+    subscriptions.py
+  core/
+    models.py
+    specs.py
+    config.py
+    output.py
+    x_auth.py
   fetchers/
     common.py
     google.py
@@ -294,25 +305,23 @@ daily_cli/
   plugins/
     filters.py
     semantic.py
-  common/
-    config.py
-    output.py
 ```
 
 分层职责：
 
 - `cli/`
-  - 命令行参数与 help 面板
+  - `cli.py` 是总路由网关
+  - `args.py` 放 CLI 公共参数与输出辅助
+  - 每个一级命令一个独立文件
+- `service/`
+  - 原子查询与业务编排能力
+  - 负责把 fetcher 和 plugin 组合成可直接调用的服务能力
 - `core/`
-  - 领域模型、topic 注册表、订阅定义、统一编排
-- `tools/`
-  - 原子工具能力：`search` / `trend` / `rss`
+  - 领域模型、配置、输出、规格和鉴权等核心基础能力
 - `fetchers/`
   - 每个来源一个独立抓取文件，正文抓取再拆到 `crawlers/` 子包
 - `plugins/`
   - 目前只保留过滤插件
-- `common/`
-  - 通用配置与输出渲染
 
 ## 开发
 
@@ -325,10 +334,10 @@ python3 -m unittest discover -s tests -v
 查看帮助：
 
 ```bash
-daily --help
-daily trend --help
-daily search --help
-daily rss --help
+wao --help
+wao trend --help
+wao search --help
+wao rss --help
 ```
 
 更多设计说明：

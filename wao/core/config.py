@@ -5,16 +5,39 @@ import os
 from pathlib import Path
 from typing import Any
 
+APP_DIRNAME = "wao"
+LEGACY_APP_DIRNAMES = ("daily",)
 
-def default_config_dir() -> Path:
+
+def _config_home() -> Path:
     xdg_home = os.environ.get("XDG_CONFIG_HOME", "").strip()
     if xdg_home:
-        return Path(xdg_home).expanduser() / "daily"
-    return Path.home() / ".config" / "daily"
+        return Path(xdg_home).expanduser()
+    return Path.home() / ".config"
+
+
+def default_config_dir() -> Path:
+    return _config_home() / APP_DIRNAME
+
+
+def legacy_config_dirs() -> tuple[Path, ...]:
+    home = _config_home()
+    return tuple(home / dirname for dirname in LEGACY_APP_DIRNAMES)
 
 
 def config_file(name: str) -> Path:
     return default_config_dir() / name
+
+
+def existing_config_file(name: str) -> Path:
+    preferred = config_file(name)
+    if preferred.exists():
+        return preferred
+    for legacy_dir in legacy_config_dirs():
+        candidate = legacy_dir / name
+        if candidate.exists():
+            return candidate
+    return preferred
 
 
 def read_json_file(path: Path, *, default: Any) -> Any:

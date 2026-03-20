@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from ..core.models import SectionResult
+from .models import SectionResult
 
 
 def _shorten(value: str, limit: int = 160) -> str:

@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "daily"
+name = "wao"
 version = "0.3.0"
-description = "A layered command-line toolkit for daily trends, search, RSS, and curated news workflows."
+description = "Wao (哇哦): a layered command-line toolkit for trends, search, RSS, and curated news workflows."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
@@ -44,7 +44,7 @@ all = [
 ]
 
 [project.scripts]
-daily = "daily_cli.cli:main"
+wao = "wao.cli.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["daily_cli*"]
+include = ["wao*"]

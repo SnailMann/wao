@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import unittest
 
-from daily_cli.core.models import NewsItem
-from daily_cli.fetchers.body import fetch_item_bodies
-from daily_cli.fetchers.crawlers import BodyCrawler, CrawlResult
+from wao.core.models import NewsItem
+from wao.fetchers.body import fetch_item_bodies
+from wao.fetchers.crawlers import BodyCrawler, CrawlResult
 
 
 class FakeCrawler(BodyCrawler):
