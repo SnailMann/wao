@@ -5,6 +5,7 @@ from typing import Callable
 
 from ..core.models import NewsItem
 from ..core.topics import SourcePlan
+from ..runtime.rsshub import fetch_feed_url, fetch_rsshub_route
 from ..runtime.sources import (
     dedupe_items,
     fetch_baidu_realtime,
@@ -14,6 +15,7 @@ from ..runtime.sources import (
     fetch_google_trends_us,
     filter_items_by_keywords,
 )
+from ..runtime.x_api import fetch_x_user_tweets
 
 
 SourceHandler = Callable[[SourcePlan, str, int, float], list[NewsItem]]
@@ -44,6 +46,24 @@ SOURCE_PLUGINS = {
         key="github",
         label="GitHub",
         description="GitHub Trending 数据源。",
+        handlers={},
+    ),
+    "x": SourcePlugin(
+        key="x",
+        label="X",
+        description="X 官方 API 数据源。",
+        handlers={},
+    ),
+    "rsshub": SourcePlugin(
+        key="rsshub",
+        label="RSSHub",
+        description="RSSHub 订阅源。",
+        handlers={},
+    ),
+    "feed": SourcePlugin(
+        key="feed",
+        label="Feed",
+        description="普通 RSS / Atom 订阅源。",
         handlers={},
     ),
 }
@@ -138,6 +158,49 @@ def _fetch_github_trending_plan(
     return fetch_github_trending(limit=limit, timeout=timeout, category=topic_key)
 
 
+def _fetch_x_user_tweets_plan(
+    plan: SourcePlan,
+    topic_key: str,
+    limit: int,
+    timeout: float,
+) -> list[NewsItem]:
+    return fetch_x_user_tweets(
+        plan.query,
+        limit=limit,
+        timeout=timeout,
+        category=topic_key,
+    )
+
+
+def _fetch_rsshub_route_plan(
+    plan: SourcePlan,
+    topic_key: str,
+    limit: int,
+    timeout: float,
+) -> list[NewsItem]:
+    return fetch_rsshub_route(
+        plan.query,
+        instance=plan.endpoint,
+        limit=limit,
+        timeout=timeout,
+        category=topic_key,
+    )
+
+
+def _fetch_feed_url_plan(
+    plan: SourcePlan,
+    topic_key: str,
+    limit: int,
+    timeout: float,
+) -> list[NewsItem]:
+    return fetch_feed_url(
+        plan.query,
+        limit=limit,
+        timeout=timeout,
+        category=topic_key,
+    )
+
+
 def dedupe_source_items(items: list[NewsItem], limit: int) -> list[NewsItem]:
     return dedupe_items(items, limit=limit)
 
@@ -158,5 +221,20 @@ SOURCE_PLUGINS["baidu"].handlers.update(
 SOURCE_PLUGINS["github"].handlers.update(
     {
         "trending": _fetch_github_trending_plan,
+    }
+)
+SOURCE_PLUGINS["x"].handlers.update(
+    {
+        "user_tweets": _fetch_x_user_tweets_plan,
+    }
+)
+SOURCE_PLUGINS["rsshub"].handlers.update(
+    {
+        "route": _fetch_rsshub_route_plan,
+    }
+)
+SOURCE_PLUGINS["feed"].handlers.update(
+    {
+        "url": _fetch_feed_url_plan,
     }
 )

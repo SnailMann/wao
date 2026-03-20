@@ -1,6 +1,6 @@
 # daily
 
-`daily` 是一个面向 Linux / macOS 的命令行资讯工具，用来快速查看每日热点、专题新闻信号和 GitHub Trending。它优先使用公开、稳定、适合命令行接入的数据源，并把抓取、过滤、正文增强做成了可插拔的模块。
+`daily` 是一个面向 Linux / macOS 的命令行资讯工具，用来快速查看每日热点、专题新闻信号、GitHub Trending 和指定 X 用户的公开发推。它优先使用公开、稳定、适合命令行接入的数据源，并把抓取、过滤、正文增强做成了可插拔的模块。
 
 当前内置的 topics：
 
@@ -10,7 +10,9 @@
 - `finance`：金融热门事件
 - `us-market`：美股焦点
 - `github`：GitHub Trending
+- `x`：指定 X 用户公开发推
 - `search`：自定义 Google News 查询
+- `subscriptions`：RSSHub 与普通 RSS/Atom 订阅内容
 
 ## 特性
 
@@ -21,6 +23,8 @@
 - 默认仅 `us-hot` / `china-hot` 过滤 `soft`
 - `us-hot` 过滤后不足时，会自动回补 Google News Top Stories
 - 支持 Playwright 无头模式抓正文
+- 支持保存并拉取 RSSHub 与普通 RSS/Atom 订阅，例如 `rsshub://twitter/user/elonmusk`、`https://36kr.com/feed`
+- 支持通过 X 官方 API v2 获取指定用户最近公开发推
 - 支持文本和 JSON 两种输出
 
 ## 安装
@@ -61,6 +65,12 @@ daily model download
 daily topics
 daily summary
 daily fetch us-hot china-hot
+daily x login
+daily x fetch elonmusk
+daily fetch x --x-user elonmusk
+daily subscriptions add rsshub://twitter/user/elonmusk --name Elon
+daily subscriptions add https://36kr.com/feed --name 36kr
+daily subscriptions fetch
 daily fetch github --limit 10
 daily search "人工智能" --google-locale cn
 ```
@@ -86,11 +96,32 @@ daily topics --format json
 - `finance`
 - `github`
 
+`x` 不会加入默认 summary。
+
 ```bash
 daily summary
 daily summary --no-filter
 daily summary --filter-mode model
 ```
+
+### `daily x`
+
+配置 X Bearer Token，或直接拉取某个公开账号的最近发推。
+
+```bash
+daily x login
+daily x login <BEARER_TOKEN>
+daily x status
+daily x fetch elonmusk
+daily x fetch @elonmusk --limit 5 --format json
+```
+
+说明：
+
+- `daily x login` 不传 token 时，会在终端里安全输入
+- 优先读取环境变量 `X_BEARER_TOKEN`
+- 也支持通过 `daily fetch x --x-user elonmusk` 走统一 topic 管线
+- `x` topic 默认不做分类过滤，也不加入 `summary`
 
 ### `daily fetch`
 
@@ -99,6 +130,7 @@ daily summary --filter-mode model
 ```bash
 daily fetch us-hot
 daily fetch china-hot ai finance
+daily fetch x --x-user elonmusk
 daily fetch us-market --source all --limit 8
 daily fetch github --limit 10 --format json
 ```
@@ -113,6 +145,28 @@ daily search "人工智能" --google-locale cn
 daily search "Federal Reserve" --fetch-body
 ```
 
+### `daily subscriptions`
+
+管理 RSSHub 与普通 RSS/Atom 订阅，支持保存、列出、删除、拉取和单次预览。
+
+```bash
+daily subscriptions add rsshub://twitter/user/elonmusk --name Elon
+daily subscriptions add https://36kr.com/feed --name 36kr
+daily subscriptions list
+daily subscriptions fetch
+daily subscriptions preview rsshub://twitter/user/elonmusk --instance https://your-rsshub.example
+daily subscriptions preview https://36kr.com/feed --name 36kr
+daily subscriptions remove twitter-user-elonmusk-xxxx
+```
+
+说明：
+
+- `rsshub://twitter/user/elonmusk` 会被解析成 RSSHub 路由 `/twitter/user/elonmusk`
+- `https://36kr.com/feed` 会被当作普通 RSS/Atom feed 直接抓取
+- 默认实例是 `https://rsshub.app`
+- 如果某个公共实例不支持对应 RSSHub 路由，可以显式传入 `--instance`
+- 订阅配置默认保存在 `~/.config/daily/subscriptions.json`
+
 ### `daily model download`
 
 下载 `model` 过滤模式所需的本地模型文件。
@@ -125,7 +179,7 @@ daily model download --force
 ## 常用参数
 
 ```text
---source auto|google|baidu|github|all
+--source auto|google|baidu|github|x|all
 --limit N
 --timeout SECONDS
 --format text|json
@@ -144,15 +198,20 @@ daily model download --force
 - `auto`：使用 topic 推荐的默认来源
 - `all`：聚合该 topic 支持的全部来源
 - `search` 默认只检索，不自动分类；显式传入 `--exclude-label` 后才会启动过滤
-- `github` 默认不做分类，也不抓正文
+- `github` / `x` 默认不做分类
+- `github` 默认不抓正文
+- `subscriptions fetch` / `subscriptions preview` 默认不自动过滤；显式传入 `--exclude-label` 后才会启动分类
 
 ## 默认行为
 
 - 默认仅 `us-hot` / `china-hot` 过滤 `soft`
-- `ai` / `finance` / `us-market` / `github` / `search` 默认只抓取，不自动分类
+- `ai` / `finance` / `us-market` / `github` / `x` / `search` 默认只抓取，不自动分类
 - 开启过滤后，会额外抓取更多候选，以保证过滤后尽量补足 `limit`
 - `us-hot` 过滤后不足时，会按需用 Google News Top Stories 回补
 - `tfidf` 是默认过滤模式，更适合开箱即用和开源分发
+- `x` topic 使用 X 官方 API v2，需要先运行 `daily x login` 或设置 `X_BEARER_TOKEN`
+- RSSHub 订阅通过 `rsshub://` 自定义地址 + 实例地址解析成真实 feed URL
+- 普通订阅直接使用公开 RSS/Atom URL，例如 `https://36kr.com/feed`
 
 ## Topic 概览
 
@@ -164,6 +223,7 @@ daily model download --force
 | `finance` | `google + baidu` | `5` | 无 |
 | `us-market` | `google + baidu` | `5` | 无 |
 | `github` | `github` | `10` | 无 |
+| `x` | `x` | `10` | 无 |
 
 ## 过滤模式
 
@@ -214,9 +274,12 @@ daily_cli/
   __main__.py
   cli.py         # CLI 参数与帮助面板
   core/
+    config.py    # 通用配置目录与 JSON 配置读写
     models.py    # NewsItem / SectionResult 数据模型
     topics.py    # topic 注册表
     pipeline.py  # 抓取 / 过滤 / 回补 / 增强总管线
+    subscriptions.py
+    x_auth.py    # X Token 配置
   plugins/
     providers.py # source 插件注册表
     filters.py   # filter 插件注册表
@@ -225,6 +288,8 @@ daily_cli/
     sources.py   # 原始上游接口与解析器
     semantic.py  # tfidf/model 两套打标实现
     body_fetch.py
+    rsshub.py
+    x_api.py
   renderers/
     output.py    # text/json 输出
 ```

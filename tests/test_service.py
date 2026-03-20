@@ -261,6 +261,38 @@ class SemanticFilterTests(unittest.TestCase):
 
     @patch("daily_cli.core.pipeline.fetch_source_plan")
     @patch("daily_cli.core.pipeline.annotate_items")
+    def test_x_topic_does_not_trigger_semantic_by_default(
+        self,
+        mocked_annotate,
+        mocked_fetch_source_plan,
+    ) -> None:
+        mocked_fetch_source_plan.return_value = [
+            NewsItem(
+                title="Starship update",
+                category="x",
+                provider="x",
+                feed="X",
+            )
+        ]
+
+        section = collect_topics(
+            ["x"],
+            source="x",
+            limit=10,
+            timeout=1.0,
+            x_user="elonmusk",
+            semantic_enabled=True,
+            semantic_filter=True,
+        )[0]
+
+        mocked_annotate.assert_not_called()
+        self.assertFalse(section.semantic_enabled)
+        self.assertFalse(section.filter_enabled)
+        self.assertEqual(len(section.items), 1)
+        self.assertEqual(section.items[0].content_label, "")
+
+    @patch("daily_cli.core.pipeline.fetch_source_plan")
+    @patch("daily_cli.core.pipeline.annotate_items")
     def test_us_hot_refills_with_google_news_after_soft_filter(
         self,
         mocked_annotate,

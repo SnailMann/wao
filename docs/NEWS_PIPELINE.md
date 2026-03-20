@@ -36,6 +36,9 @@
 - `google`
 - `baidu`
 - `github`
+- `x`
+- `rsshub`
+- `feed`
 
 每个 source 再按 mode 派发到具体抓取实现，例如：
 
@@ -45,6 +48,9 @@
 - `baidu:hotboard`
 - `baidu:keyword_hotboard`
 - `github:trending`
+- `x:user_tweets`
+- `rsshub:route`
+- `feed:url`
 
 ### 2.3 `plugins/filters.py`
 
@@ -71,6 +77,25 @@
 - 回补
 - 正文增强
 
+### 2.6 `core/subscriptions.py` / `runtime/rsshub.py`
+
+负责 RSSHub 与普通 RSS/Atom 订阅能力：
+
+- 解析 `rsshub://...` 自定义地址
+- 解析普通 `https://...` feed 地址
+- 生成真实 RSSHub feed URL
+- 把订阅保存到本地配置
+- 把订阅映射成动态 TopicSpec，再复用现有管线
+
+### 2.7 `core/x_auth.py` / `runtime/x_api.py`
+
+负责 X 官方 API 能力：
+
+- 保存或读取 X Bearer Token
+- 优先从环境变量 `X_BEARER_TOKEN` 读取
+- 通过 X 官方 API v2 拉取公开账号最近发推
+- 把 tweet 数据映射成统一 `NewsItem`
+
 ## 3. Topic 一览
 
 | Topic | 中文名称 | 默认来源 | 默认数量 | 默认过滤 |
@@ -81,7 +106,9 @@
 | `finance` | 金融热门事件 | `google + baidu` | `5` | 无 |
 | `us-market` | 美股焦点 | `google + baidu` | `5` | 无 |
 | `github` | GitHub Trending | `github` | `10` | 无 |
+| `x` | X 用户动态 | `x` | `10` | 无 |
 | `search` | 自定义查询 | `google` | 用户指定 | 无 |
+| `subscriptions` | RSSHub / RSS / Atom 订阅 | `rsshub` 或 `feed` | `10` | 无 |
 
 默认摘要 `summary` 会输出：
 
@@ -90,6 +117,8 @@
 - `ai`
 - `finance`
 - `github`
+
+`x` 不会加入默认摘要。
 
 ## 4. 数据源
 
@@ -194,6 +223,74 @@ https://github.com/trending
 - Forks
 - 今日新增 Stars
 
+### 4.4 RSSHub
+
+用途：
+
+- `subscriptions`
+- 后续也可扩展成普通自定义 feed 路由
+
+当前支持的订阅格式：
+
+```text
+rsshub://twitter/user/elonmusk
+```
+
+解析规则：
+
+```text
+rsshub://twitter/user/elonmusk
+=> route: /twitter/user/elonmusk
+=> default instance: https://rsshub.app
+=> final URL: https://rsshub.app/twitter/user/elonmusk
+```
+
+如果你有自己的 RSSHub 实例，也可以在 CLI 层通过 `--instance` 指定。
+
+### 4.5 X
+
+接口：
+
+```text
+GET https://api.x.com/2/users/by/username/:username
+GET https://api.x.com/2/users/:id/tweets
+```
+
+用途：
+
+- `x`
+
+实现：
+
+1. 先根据用户名查询用户 ID
+2. 再拉取该用户最近公开发推
+3. 默认排除 retweets 和 replies，减少噪声
+4. 使用 Bearer Token 做只读认证
+
+说明：
+
+- `x` topic 不加入 `summary`
+- `x` topic 默认不启动分类过滤
+- 需要先运行 `daily x login` 或设置 `X_BEARER_TOKEN`
+
+### 4.6 普通 RSS / Atom Feed
+
+用途：
+
+- `subscriptions`
+
+当前支持直接订阅公开 RSS / Atom 地址，例如：
+
+```text
+https://36kr.com/feed
+```
+
+解析方式：
+
+- 直接把 URL 当作 feed 源抓取
+- 复用统一的 RSS / Atom 解析逻辑
+- 不需要 `--instance`
+
 ## 5. Topic 是怎么定义的
 
 ### 5.1 来源定义型 topic
@@ -218,6 +315,18 @@ https://github.com/trending
 - `finance`
 - `us-market`
 - `search`
+- `x`
+
+### 5.3 订阅定义型 topic
+
+这类内容不是内置静态 topic，而是用户自己保存的动态订阅。
+
+当前实现：
+
+1. 用户保存 `rsshub://...` 或 `https://...` 地址
+2. 本地配置里记录 route、instance、name、key
+3. 运行时把订阅映射成一个动态 `TopicSpec`
+4. 再复用统一的 `pipeline.py`
 
 例如：
 
@@ -225,6 +334,7 @@ https://github.com/trending
 - `finance` 通过固定金融查询词定义边界
 - `us-market` 通过美股查询词定义边界
 - `search` 直接使用用户输入的查询词
+- `x` 通过 `--x-user` 或 `daily x fetch <username>` 指定用户名
 
 ## 6. 多来源排序与去重
 
@@ -274,6 +384,7 @@ https://github.com/trending
 - `finance`
 - `us-market`
 - `github`
+- `x`
 - `search`
 
 它们只有在显式传入 `--exclude-label` 时，才会进入分类和过滤链路。
@@ -367,6 +478,8 @@ intfloat/multilingual-e5-small
 4. 对回补条目继续做同样的分类和过滤
 5. 只追加未重复且未被过滤掉的结果
 
+订阅内容当前都不做自动回补。
+
 这样可以缓解 Google Trends 标题过短、娱乐噪声偏多的问题。
 
 ## 11. 正文抓取
@@ -390,6 +503,9 @@ intfloat/multilingual-e5-small
 - 访问验证页
 - 订阅墙
 - 某些新闻站的客户端渲染页面
+- 某些 RSSHub 公共实例未必启用所有路由
+- 某些 RSSHub 路由可能依赖实例端额外配置，而不是 CLI 端配置
+- 某些普通 feed 可能会返回 HTML 而不是有效 RSS / Atom XML
 
 ## 12. 失败与降级
 

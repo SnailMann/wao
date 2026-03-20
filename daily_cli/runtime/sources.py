@@ -91,7 +91,11 @@ def format_pub_date(value: str) -> str:
     try:
         dt = parsedate_to_datetime(value)
     except (TypeError, ValueError):
-        return value
+        try:
+            normalized = value.replace("Z", "+00:00")
+            dt = datetime.fromisoformat(normalized)
+        except (TypeError, ValueError):
+            return value
     if dt.tzinfo is None:
         return dt.strftime("%Y-%m-%d %H:%M:%S")
     return dt.astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")

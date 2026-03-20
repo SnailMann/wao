@@ -11,6 +11,7 @@ from .topics import (
     DEFAULT_SUMMARY_TOPICS,
     TopicSpec,
     build_search_topic,
+    build_x_topic,
     get_source_plan,
     get_topic,
     resolve_sources,
@@ -266,8 +267,8 @@ def _finalize_topic_section(
     return section
 
 
-def collect_topics(
-    keys: list[str] | tuple[str, ...],
+def collect_topic_specs(
+    specs: list[TopicSpec] | tuple[TopicSpec, ...],
     *,
     source: str,
     limit: int | None,
@@ -281,12 +282,12 @@ def collect_topics(
     body_timeout: float = 15.0,
     body_max_chars: int = 4000,
 ) -> list[SectionResult]:
-    if not keys:
+    if not specs:
         return []
 
     prepared_topics = [
         _prepare_topic(
-            get_topic(key),
+            spec,
             source=source,
             limit=limit,
             timeout=timeout,
@@ -294,7 +295,7 @@ def collect_topics(
             semantic_filter=semantic_filter,
             excluded_labels=excluded_labels,
         )
-        for key in keys
+        for spec in specs
     ]
 
     if semantic_enabled:
@@ -324,12 +325,46 @@ def collect_topics(
     return sections
 
 
+def collect_topics(
+    keys: list[str] | tuple[str, ...],
+    *,
+    source: str,
+    limit: int | None,
+    timeout: float,
+    x_user: str | None = None,
+    semantic_enabled: bool = True,
+    semantic_filter: bool = True,
+    excluded_labels: tuple[str, ...] | None = None,
+    semantic_model_dir: str | None = None,
+    filter_mode: str = "tfidf",
+    fetch_body: bool = False,
+    body_timeout: float = 15.0,
+    body_max_chars: int = 4000,
+) -> list[SectionResult]:
+    specs = [build_x_topic(x_user or "") if key == "x" else get_topic(key) for key in keys]
+    return collect_topic_specs(
+        specs,
+        source=source,
+        limit=limit,
+        timeout=timeout,
+        semantic_enabled=semantic_enabled,
+        semantic_filter=semantic_filter,
+        excluded_labels=excluded_labels,
+        semantic_model_dir=semantic_model_dir,
+        filter_mode=filter_mode,
+        fetch_body=fetch_body,
+        body_timeout=body_timeout,
+        body_max_chars=body_max_chars,
+    )
+
+
 def collect_topic(
     key: str,
     *,
     source: str,
     limit: int | None,
     timeout: float,
+    x_user: str | None = None,
     semantic_enabled: bool = True,
     semantic_filter: bool = True,
     excluded_labels: tuple[str, ...] | None = None,
@@ -339,8 +374,8 @@ def collect_topic(
     body_timeout: float = 15.0,
     body_max_chars: int = 4000,
 ) -> SectionResult:
-    return collect_topics(
-        [key],
+    return collect_topic_specs(
+        [build_x_topic(x_user or "") if key == "x" else get_topic(key)],
         source=source,
         limit=limit,
         timeout=timeout,
@@ -369,8 +404,8 @@ def collect_summary(
     body_timeout: float = 15.0,
     body_max_chars: int = 4000,
 ) -> list[SectionResult]:
-    return collect_topics(
-        list(DEFAULT_SUMMARY_TOPICS),
+    return collect_topic_specs(
+        [get_topic(key) for key in DEFAULT_SUMMARY_TOPICS],
         source=source,
         limit=limit,
         timeout=timeout,
@@ -404,36 +439,17 @@ def collect_search(
     if resolved_locale == "auto":
         resolved_locale = "cn" if contains_cjk(query) else "us"
 
-    prepared = _prepare_topic(
-        build_search_topic(query, resolved_locale),
+    return collect_topic_specs(
+        [build_search_topic(query, resolved_locale)],
         source="google",
         limit=limit,
         timeout=timeout,
         semantic_enabled=semantic_enabled,
         semantic_filter=semantic_filter,
         excluded_labels=excluded_labels,
-    )
-
-    if semantic_enabled:
-        _annotate_prepared_topics(
-            [prepared],
-            semantic_model_dir=semantic_model_dir,
-            filter_mode=filter_mode,
-        )
-
-    section = _finalize_topic_section(
-        prepared,
-        prepared.section,
-        timeout=timeout,
         semantic_model_dir=semantic_model_dir,
         filter_mode=filter_mode,
-    )
-
-    if fetch_body:
-        enrich_sections_with_body(
-            [section],
-            timeout=body_timeout,
-            max_chars=body_max_chars,
-        )
-
-    return section
+        fetch_body=fetch_body,
+        body_timeout=body_timeout,
+        body_max_chars=body_max_chars,
+    )[0]
