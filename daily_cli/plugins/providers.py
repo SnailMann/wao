@@ -15,7 +15,7 @@ from ..runtime.sources import (
     fetch_google_trends_us,
     filter_items_by_keywords,
 )
-from ..runtime.x_api import fetch_x_user_tweets
+from ..runtime.x_api import fetch_x_news_search, fetch_x_recent_search, fetch_x_user_tweets
 
 
 SourceHandler = Callable[[SourcePlan, str, int, float], list[NewsItem]]
@@ -51,7 +51,19 @@ SOURCE_PLUGINS = {
     "x": SourcePlugin(
         key="x",
         label="X",
-        description="X 官方 API 数据源。",
+        description="X 官方 recent search 数据源。",
+        handlers={},
+    ),
+    "x-user": SourcePlugin(
+        key="x-user",
+        label="X User",
+        description="X 官方用户时间线数据源。",
+        handlers={},
+    ),
+    "x-news": SourcePlugin(
+        key="x-news",
+        label="X News",
+        description="X 官方 News API 数据源。",
         handlers={},
     ),
     "rsshub": SourcePlugin(
@@ -172,6 +184,34 @@ def _fetch_x_user_tweets_plan(
     )
 
 
+def _fetch_x_recent_search_plan(
+    plan: SourcePlan,
+    topic_key: str,
+    limit: int,
+    timeout: float,
+) -> list[NewsItem]:
+    return fetch_x_recent_search(
+        plan.query,
+        limit=limit,
+        timeout=timeout,
+        category=topic_key,
+    )
+
+
+def _fetch_x_news_search_plan(
+    plan: SourcePlan,
+    topic_key: str,
+    limit: int,
+    timeout: float,
+) -> list[NewsItem]:
+    return fetch_x_news_search(
+        plan.query,
+        limit=limit,
+        timeout=timeout,
+        category=topic_key,
+    )
+
+
 def _fetch_rsshub_route_plan(
     plan: SourcePlan,
     topic_key: str,
@@ -225,7 +265,17 @@ SOURCE_PLUGINS["github"].handlers.update(
 )
 SOURCE_PLUGINS["x"].handlers.update(
     {
-        "user_tweets": _fetch_x_user_tweets_plan,
+        "search_recent": _fetch_x_recent_search_plan,
+    }
+)
+SOURCE_PLUGINS["x-user"].handlers.update(
+    {
+        "user_posts": _fetch_x_user_tweets_plan,
+    }
+)
+SOURCE_PLUGINS["x-news"].handlers.update(
+    {
+        "news_search": _fetch_x_news_search_plan,
     }
 )
 SOURCE_PLUGINS["rsshub"].handlers.update(

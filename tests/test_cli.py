@@ -25,17 +25,20 @@ class CliParserTests(unittest.TestCase):
 
     def test_top_level_help_mentions_topics_and_daily_command(self) -> None:
         help_text = build_parser().format_help()
-        self.assertIn("us-hot, china-hot, ai, finance, us-market, github, x", help_text)
+        self.assertIn("us-hot, china-hot, ai, finance, us-market, github", help_text)
         self.assertIn("默认仅 us-hot / china-hot 过滤 soft", help_text)
         self.assertIn("Google News Top Stories 回补", help_text)
         self.assertIn("--filter-mode tfidf|model", help_text)
-        self.assertIn("--source auto|google|baidu|github|x|all", help_text)
+        self.assertIn("--source auto|google|baidu|github|all", help_text)
         self.assertIn("--exclude-label macro|industry|tech|public|soft", help_text)
         self.assertIn("--fetch-body", help_text)
         self.assertIn("daily summary", help_text)
         self.assertIn("topics", help_text)
         self.assertIn("subscriptions", help_text)
         self.assertIn("daily x login", help_text)
+        self.assertIn("daily search \"OpenAI\" --source x", help_text)
+        self.assertIn("daily search elonmusk --source x-user", help_text)
+        self.assertNotIn("daily x fetch", help_text)
 
     def test_topics_command_exists(self) -> None:
         args = build_parser().parse_args(["topics"])
@@ -66,23 +69,24 @@ class CliParserTests(unittest.TestCase):
         self.assertEqual(args.subscriptions_command, "add")
         self.assertEqual(args.subscription_uri, "https://36kr.com/feed")
 
-    def test_fetch_accepts_x_user(self) -> None:
-        args = build_parser().parse_args(["fetch", "x", "--x-user", "elonmusk"])
-        self.assertEqual(args.command, "fetch")
-        self.assertEqual(args.topics, ["x"])
-        self.assertEqual(args.x_user, "elonmusk")
-
     def test_x_login_command_exists(self) -> None:
         args = build_parser().parse_args(["x", "login"])
         self.assertEqual(args.command, "x")
         self.assertEqual(args.x_command, "login")
 
-    def test_x_fetch_accepts_username(self) -> None:
-        args = build_parser().parse_args(["x", "fetch", "elonmusk", "--limit", "3"])
-        self.assertEqual(args.command, "x")
-        self.assertEqual(args.x_command, "fetch")
-        self.assertEqual(args.username, "elonmusk")
-        self.assertEqual(args.limit, 3)
+    def test_search_accepts_x_source(self) -> None:
+        args = build_parser().parse_args(["search", "OpenAI", "--source", "x-news"])
+        self.assertEqual(args.command, "search")
+        self.assertEqual(args.source, "x-news")
+
+    def test_search_accepts_x_user_source(self) -> None:
+        args = build_parser().parse_args(["search", "elonmusk", "--source", "x-user"])
+        self.assertEqual(args.command, "search")
+        self.assertEqual(args.source, "x-user")
+
+    def test_fetch_rejects_removed_x_topic(self) -> None:
+        with self.assertRaises(SystemExit):
+            build_parser().parse_args(["fetch", "x"])
 
 
 if __name__ == "__main__":

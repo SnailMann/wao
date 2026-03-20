@@ -14,7 +14,7 @@
 
 ## 2. 代码结构
 
-当前项目按职责拆成 5 层：
+当前项目按职责拆成多层：
 
 ### 2.1 `core/topics.py`
 
@@ -37,6 +37,8 @@
 - `baidu`
 - `github`
 - `x`
+- `x-user`
+- `x-news`
 - `rsshub`
 - `feed`
 
@@ -48,7 +50,9 @@
 - `baidu:hotboard`
 - `baidu:keyword_hotboard`
 - `github:trending`
-- `x:user_tweets`
+- `x:search_recent`
+- `x-user:user_posts`
+- `x-news:news_search`
 - `rsshub:route`
 - `feed:url`
 
@@ -93,8 +97,18 @@
 
 - 保存或读取 X Bearer Token
 - 优先从环境变量 `X_BEARER_TOKEN` 读取
-- 通过 X 官方 API v2 拉取公开账号最近发推
+- 通过 X 官方 API v2 拉取 recent search、news search 和用户公开发推
 - 把 tweet 数据映射成统一 `NewsItem`
+
+### 2.8 `daily_cli/search.py`
+
+提供可复用的公共搜索入口：
+
+- `collect_search`
+- `build_search_topic`
+- `SEARCH_SOURCE_CHOICES`
+
+这样订阅、自动化脚本或后续新入口都可以共用同一套搜索链路，而不必依赖 CLI 参数层。
 
 ## 3. Topic 一览
 
@@ -106,7 +120,6 @@
 | `finance` | 金融热门事件 | `google + baidu` | `5` | 无 |
 | `us-market` | 美股焦点 | `google + baidu` | `5` | 无 |
 | `github` | GitHub Trending | `github` | `10` | 无 |
-| `x` | X 用户动态 | `x` | `10` | 无 |
 | `search` | 自定义查询 | `google` | 用户指定 | 无 |
 | `subscriptions` | RSSHub / RSS / Atom 订阅 | `rsshub` 或 `feed` | `10` | 无 |
 
@@ -117,8 +130,6 @@
 - `ai`
 - `finance`
 - `github`
-
-`x` 不会加入默认摘要。
 
 ## 4. 数据源
 
@@ -247,7 +258,7 @@ rsshub://twitter/user/elonmusk
 
 如果你有自己的 RSSHub 实例，也可以在 CLI 层通过 `--instance` 指定。
 
-### 4.5 X
+### 4.5 X User Posts
 
 接口：
 
@@ -258,7 +269,7 @@ GET https://api.x.com/2/users/:id/tweets
 
 用途：
 
-- `x`
+- `search --source x-user`
 
 实现：
 
@@ -269,11 +280,33 @@ GET https://api.x.com/2/users/:id/tweets
 
 说明：
 
-- `x` topic 不加入 `summary`
-- `x` topic 默认不启动分类过滤
+- `x-user` 不是独立 topic，而是 `daily search` 的一个来源
 - 需要先运行 `daily x login` 或设置 `X_BEARER_TOKEN`
 
-### 4.6 普通 RSS / Atom Feed
+### 4.6 X Search / X News Search
+
+用途：
+
+- `search --source x`
+- `search --source x-user`
+- `search --source x-news`
+- `search --source all`
+
+实现：
+
+1. `x` 使用 `GET /2/tweets/search/recent`
+2. `x-user` 使用 `GET /2/users/by/username/:username` + `GET /2/users/:id/tweets`
+3. `x-news` 使用 `GET /2/news/search`
+4. `search --source all` 会把 `google + x + x-news` 做轮询合并和标题去重
+
+说明：
+
+- `x` 是“搜帖子”
+- `x-user` 是“按用户名拉公开发推”
+- `x-news` 是“搜新闻故事”
+- `search` 默认仍然是 `google`
+
+### 4.7 普通 RSS / Atom Feed
 
 用途：
 
@@ -315,7 +348,6 @@ https://36kr.com/feed
 - `finance`
 - `us-market`
 - `search`
-- `x`
 
 ### 5.3 订阅定义型 topic
 
@@ -334,7 +366,7 @@ https://36kr.com/feed
 - `finance` 通过固定金融查询词定义边界
 - `us-market` 通过美股查询词定义边界
 - `search` 直接使用用户输入的查询词
-- `x` 通过 `--x-user` 或 `daily x fetch <username>` 指定用户名
+- `search --source x-user` 会把用户输入直接当成 X 用户名
 
 ## 6. 多来源排序与去重
 
@@ -384,7 +416,6 @@ https://36kr.com/feed
 - `finance`
 - `us-market`
 - `github`
-- `x`
 - `search`
 
 它们只有在显式传入 `--exclude-label` 时，才会进入分类和过滤链路。

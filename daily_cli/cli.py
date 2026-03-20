@@ -21,7 +21,7 @@ from .core.subscriptions import (
     remove_subscription,
     resolve_subscriptions,
 )
-from .core.topics import DEFAULT_SUMMARY_TOPICS, build_x_topic, get_topic, list_topic_keys, list_topics
+from .core.topics import DEFAULT_SUMMARY_TOPICS, SEARCH_SOURCE_CHOICES, get_topic, list_topic_keys, list_topics
 from .plugins.filters import list_filter_modes
 from .renderers.output import render_json, render_text
 from .runtime.semantic import MODEL_REPO_ID, SemanticError, download_model, list_content_labels
@@ -55,13 +55,13 @@ def _top_level_help() -> str:
     return dedent(
         f"""\
         daily
-          一个面向 Linux / macOS 的资讯命令行工具，聚合 Google、Baidu、GitHub 和 X 的公开信息源。
+          一个面向 Linux / macOS 的资讯命令行工具，聚合 Google、Baidu、GitHub、X 与 RSS/Atom 的公开信息源。
 
         Commands:
           topics
             列出全部 topic、默认来源、默认数量和默认过滤策略。
           x
-            配置 X Bearer Token，或直接拉取某个公开账号的最近发推。
+            配置或查看 X Bearer Token。
           subscriptions
             管理 RSSHub 与普通 RSS/Atom 订阅，支持 add/list/fetch/remove/preview。
           summary
@@ -69,7 +69,7 @@ def _top_level_help() -> str:
           fetch <topic ...>
             拉取一个或多个指定 topic。
           search <query>
-            用 Google News 检索最新相关资讯。
+            用 Google News、X Search、X User Posts 或 X News Search 检索最新相关资讯。
           model download
             下载 model 模式所需模型；只用 tfidf 时可跳过。
 
@@ -77,8 +77,10 @@ def _top_level_help() -> str:
           {_topic_summary()}
 
         Common options:
-          --source auto|google|baidu|github|x|all
+          --source auto|google|baidu|github|all
             指定来源；默认按 topic 自己的默认配置选择。
+          search 专用来源: google|x|x-user|x-news|all
+            `daily search` 可额外切换 X recent search、X 用户发推和 X News Search。
           --limit N
             控制每个 section 返回条数。
           --timeout SECONDS
@@ -106,15 +108,15 @@ def _top_level_help() -> str:
 
         Defaults:
           默认仅 us-hot / china-hot 过滤 soft。
-          ai / finance / us-market / github / x / search 默认只抓取，不自动分类。
+          ai / finance / us-market / github / search 默认只抓取，不自动分类。
           us-hot 过滤后不足时，会按需用 Google News Top Stories 回补。
 
         Examples:
           daily summary
           daily summary --filter-mode tfidf --limit 5
           daily x login
-          daily x fetch elonmusk
-          daily fetch x --x-user elonmusk
+          daily x status
+          daily search elonmusk --source x-user
           daily subscriptions add rsshub://twitter/user/elonmusk --name Elon
           daily subscriptions add https://36kr.com/feed --name 36kr
           daily subscriptions fetch
@@ -122,6 +124,8 @@ def _top_level_help() -> str:
           daily fetch github --limit 10 --format json
           daily fetch us-hot --fetch-body --body-max-chars 3000
           daily search "人工智能" --google-locale cn
+          daily search "OpenAI" --source x
+          daily search "AI" --source x-news
           daily model download
 
         More:
@@ -134,7 +138,7 @@ def add_common_fetch_args(parser: argparse.ArgumentParser, *, include_source: bo
     if include_source:
         parser.add_argument(
             "--source",
-            choices=("auto", "google", "baidu", "github", "x", "all"),
+            choices=("auto", "google", "baidu", "github", "all"),
             default="auto",
             help="选择数据来源，默认按 topic 自动挑选。",
         )
@@ -205,6 +209,12 @@ def add_common_fetch_args(parser: argparse.ArgumentParser, *, include_source: bo
 
 def add_search_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
+        "--source",
+        choices=SEARCH_SOURCE_CHOICES,
+        default="auto",
+        help="search 可用来源：google、x、x-user、x-news 或 all；默认 auto=google。",
+    )
+    parser.add_argument(
         "--limit",
         type=positive_int,
         default=5,
@@ -268,25 +278,10 @@ def add_search_args(parser: argparse.ArgumentParser) -> None:
         help="每条正文最多返回多少字符。",
     )
 
-
-def _resolve_fetch_specs(keys: list[str] | tuple[str, ...], *, x_user: str | None) -> list:
-    specs = []
-    has_x = False
-    for key in keys:
-        if key == "x":
-            has_x = True
-            specs.append(build_x_topic(x_user or ""))
-            continue
-        specs.append(get_topic(key))
-    if x_user and not has_x:
-        raise ValueError("`--x-user` 仅在 `fetch x` 时使用")
-    return specs
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="daily",
-        description="快速检索每日热门话题、专题资讯、GitHub Trending 与 X 用户动态。",
+        description="快速检索每日热门话题、专题资讯、GitHub Trending 与跨源搜索结果。",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=_top_level_help(),
     )
@@ -309,17 +304,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     x_parser = subparsers.add_parser(
         "x",
-        help="配置 X Bearer Token，或拉取某个用户的公开发推。",
+        help="配置或查看 X Bearer Token。",
         description=dedent(
             """\
-            管理 X 官方 API 所需的 Bearer Token，并支持按用户名拉取公开发推。
+            管理 X 官方 API 所需的 Bearer Token。
 
             示例:
               daily x login
               daily x login <BEARER_TOKEN>
               daily x status
-              daily x fetch elonmusk
-              daily fetch x --x-user elonmusk
+              daily x logout
+              daily search elonmusk --source x-user
+              daily search "OpenAI" --source x
             """
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -347,15 +343,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="删除本地保存的 X Token。",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-
-    x_fetch_parser = x_subparsers.add_parser(
-        "fetch",
-        help="按用户名拉取公开发推。",
-        description="通过 X 官方 API v2 拉取指定用户名最近公开发推。",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    x_fetch_parser.add_argument("username", help="X 用户名，例如 elonmusk 或 @elonmusk。")
-    add_common_fetch_args(x_fetch_parser, include_source=False)
 
     subscriptions_parser = subparsers.add_parser(
         "subscriptions",
@@ -499,7 +486,6 @@ def build_parser() -> argparse.ArgumentParser:
               {_topic_summary()}
 
             默认仅 us-hot / china-hot 会触发 soft 过滤。
-            若 topic 为 x，需要同时传入 --x-user。
             """
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -510,11 +496,6 @@ def build_parser() -> argparse.ArgumentParser:
         choices=list_topic_keys(),
         help="要查询的 topics。",
     )
-    fetch_parser.add_argument(
-        "--x-user",
-        default=None,
-        help="当 topic 包含 x 时，指定要抓取的 X 用户名，例如 elonmusk。",
-    )
     add_common_fetch_args(fetch_parser)
 
     search_parser = subparsers.add_parser(
@@ -522,10 +503,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="按关键词查询最新相关信息。",
         description=dedent(
             """\
-            按关键词通过 Google News 查询最新相关信息。
+            按关键词通过 Google News、X recent search、X user posts 或 X news search 查询最新相关信息。
 
-            search 默认只做检索，不自动分类过滤；
+            search 默认 source=google，只做检索，不自动分类过滤；
             当你显式传入 --exclude-label 时，才会启动标签过滤。
+
+            当 --source x-user 时，query 会被当作 X 用户名处理。
             """
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -636,24 +619,6 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"路径: {x_token_file()}")
                 return 0
 
-            if args.x_command == "fetch":
-                section = collect_topic_specs(
-                    [build_x_topic(args.username)],
-                    source="x",
-                    limit=args.limit,
-                    timeout=args.timeout,
-                    semantic_enabled=not args.no_semantic,
-                    semantic_filter=not args.no_semantic and not args.no_filter,
-                    excluded_labels=tuple(args.exclude_label) if args.exclude_label else None,
-                    semantic_model_dir=args.semantic_model_dir,
-                    filter_mode=args.filter_mode,
-                    fetch_body=args.fetch_body,
-                    body_timeout=args.body_timeout,
-                    body_max_chars=args.body_max_chars,
-                )[0]
-                print(emit_output(args.format, [section]), end="")
-                return 0
-
         if args.command == "subscriptions":
             if args.subscriptions_command == "add":
                 subscription = add_subscription(
@@ -760,7 +725,7 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "fetch":
             sections = collect_topic_specs(
-                _resolve_fetch_specs(args.topics, x_user=args.x_user),
+                [get_topic(key) for key in args.topics],
                 source=args.source,
                 limit=args.limit,
                 timeout=args.timeout,
@@ -781,6 +746,7 @@ def main(argv: list[str] | None = None) -> int:
                 query=args.query,
                 limit=args.limit,
                 timeout=args.timeout,
+                source=args.source,
                 google_locale=args.google_locale,
                 semantic_enabled=not args.no_semantic,
                 semantic_filter=not args.no_semantic and not args.no_filter,

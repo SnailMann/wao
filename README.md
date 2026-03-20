@@ -1,6 +1,6 @@
 # daily
 
-`daily` 是一个面向 Linux / macOS 的命令行资讯工具，用来快速查看每日热点、专题新闻信号、GitHub Trending 和指定 X 用户的公开发推。它优先使用公开、稳定、适合命令行接入的数据源，并把抓取、过滤、正文增强做成了可插拔的模块。
+`daily` 是一个面向 Linux / macOS 的命令行资讯工具，用来快速查看每日热点、专题新闻信号、GitHub Trending，以及基于 Google / X / RSS 的跨源搜索结果。它优先使用公开、稳定、适合命令行接入的数据源，并把抓取、过滤、正文增强做成了可插拔的模块。
 
 当前内置的 topics：
 
@@ -10,9 +10,12 @@
 - `finance`：金融热门事件
 - `us-market`：美股焦点
 - `github`：GitHub Trending
-- `x`：指定 X 用户公开发推
-- `search`：自定义 Google News 查询
+
+额外能力：
+
+- `search`：统一的跨源检索入口，支持 `google` / `x` / `x-user` / `x-news` / `all`
 - `subscriptions`：RSSHub 与普通 RSS/Atom 订阅内容
+- `x`：只负责配置 X Bearer Token，不再承担查询入口
 
 ## 特性
 
@@ -24,7 +27,7 @@
 - `us-hot` 过滤后不足时，会自动回补 Google News Top Stories
 - 支持 Playwright 无头模式抓正文
 - 支持保存并拉取 RSSHub 与普通 RSS/Atom 订阅，例如 `rsshub://twitter/user/elonmusk`、`https://36kr.com/feed`
-- 支持通过 X 官方 API v2 获取指定用户最近公开发推
+- 支持通过 X 官方 API v2 检索帖子、新闻故事，以及按用户名获取公开发推
 - 支持文本和 JSON 两种输出
 
 ## 安装
@@ -66,13 +69,14 @@ daily topics
 daily summary
 daily fetch us-hot china-hot
 daily x login
-daily x fetch elonmusk
-daily fetch x --x-user elonmusk
+daily search elonmusk --source x-user
 daily subscriptions add rsshub://twitter/user/elonmusk --name Elon
 daily subscriptions add https://36kr.com/feed --name 36kr
 daily subscriptions fetch
 daily fetch github --limit 10
 daily search "人工智能" --google-locale cn
+daily search "OpenAI" --source x
+daily search "AI" --source x-news
 ```
 
 ## 命令
@@ -96,8 +100,6 @@ daily topics --format json
 - `finance`
 - `github`
 
-`x` 不会加入默认 summary。
-
 ```bash
 daily summary
 daily summary --no-filter
@@ -106,22 +108,22 @@ daily summary --filter-mode model
 
 ### `daily x`
 
-配置 X Bearer Token，或直接拉取某个公开账号的最近发推。
+配置 X Bearer Token，供 `daily search --source x|x-user|x-news` 使用。
 
 ```bash
 daily x login
 daily x login <BEARER_TOKEN>
 daily x status
-daily x fetch elonmusk
-daily x fetch @elonmusk --limit 5 --format json
+daily x logout
 ```
 
 说明：
 
 - `daily x login` 不传 token 时，会在终端里安全输入
 - 优先读取环境变量 `X_BEARER_TOKEN`
-- 也支持通过 `daily fetch x --x-user elonmusk` 走统一 topic 管线
-- `x` topic 默认不做分类过滤，也不加入 `summary`
+- 查询公开用户发推请使用 `daily search elonmusk --source x-user`
+- 查询关键词帖子请使用 `daily search "OpenAI" --source x`
+- 查询 X 新闻故事请使用 `daily search "AI" --source x-news`
 
 ### `daily fetch`
 
@@ -130,19 +132,44 @@ daily x fetch @elonmusk --limit 5 --format json
 ```bash
 daily fetch us-hot
 daily fetch china-hot ai finance
-daily fetch x --x-user elonmusk
 daily fetch us-market --source all --limit 8
 daily fetch github --limit 10 --format json
 ```
 
 ### `daily search`
 
-使用 Google News RSS 按关键词查询。
+统一的公共搜索入口。使用 Google News、X recent search、X user posts 或 X news search 按关键词或用户名查询。
 
 ```bash
 daily search OpenAI
 daily search "人工智能" --google-locale cn
+daily search "OpenAI" --source x
+daily search elonmusk --source x-user
+daily search "AI" --source x-news
+daily search "OpenAI" --source all
 daily search "Federal Reserve" --fetch-body
+```
+
+说明：
+
+- `search` 默认 `--source auto`，等价于 `google`
+- `--source x` 使用 X recent search
+- `--source x-user` 会把 query 当作 X 用户名，并返回该用户最近公开发推
+- `--source x-news` 使用 X news search
+- `--source all` 会把 `google + x + x-news` 混合去重后输出
+
+如果你想在别的 Python 场景里复用同一条搜索链路，可以直接使用公开 API：
+
+```python
+from daily_cli.search import collect_search
+
+section = collect_search(
+    query="OpenAI",
+    limit=5,
+    timeout=10.0,
+    source="x",
+    google_locale="us",
+)
 ```
 
 ### `daily subscriptions`
@@ -179,7 +206,8 @@ daily model download --force
 ## 常用参数
 
 ```text
---source auto|google|baidu|github|x|all
+fetch/summary: --source auto|google|baidu|github|all
+search: --source auto|google|x|x-user|x-news|all
 --limit N
 --timeout SECONDS
 --format text|json
@@ -197,19 +225,20 @@ daily model download --force
 
 - `auto`：使用 topic 推荐的默认来源
 - `all`：聚合该 topic 支持的全部来源
+- `search` 额外支持 `--source x`、`--source x-user`、`--source x-news`
 - `search` 默认只检索，不自动分类；显式传入 `--exclude-label` 后才会启动过滤
-- `github` / `x` 默认不做分类
+- `github` 默认不做分类
 - `github` 默认不抓正文
 - `subscriptions fetch` / `subscriptions preview` 默认不自动过滤；显式传入 `--exclude-label` 后才会启动分类
 
 ## 默认行为
 
 - 默认仅 `us-hot` / `china-hot` 过滤 `soft`
-- `ai` / `finance` / `us-market` / `github` / `x` / `search` 默认只抓取，不自动分类
+- `ai` / `finance` / `us-market` / `github` / `search` 默认只抓取，不自动分类
 - 开启过滤后，会额外抓取更多候选，以保证过滤后尽量补足 `limit`
 - `us-hot` 过滤后不足时，会按需用 Google News Top Stories 回补
 - `tfidf` 是默认过滤模式，更适合开箱即用和开源分发
-- `x` topic 使用 X 官方 API v2，需要先运行 `daily x login` 或设置 `X_BEARER_TOKEN`
+- `search --source x` / `x-user` / `x-news` 使用 X 官方 API v2，需要先运行 `daily x login` 或设置 `X_BEARER_TOKEN`
 - RSSHub 订阅通过 `rsshub://` 自定义地址 + 实例地址解析成真实 feed URL
 - 普通订阅直接使用公开 RSS/Atom URL，例如 `https://36kr.com/feed`
 
@@ -223,7 +252,6 @@ daily model download --force
 | `finance` | `google + baidu` | `5` | 无 |
 | `us-market` | `google + baidu` | `5` | 无 |
 | `github` | `github` | `10` | 无 |
-| `x` | `x` | `10` | 无 |
 
 ## 过滤模式
 
@@ -272,6 +300,7 @@ daily model download --force
 ```text
 daily_cli/
   __main__.py
+  search.py      # 可复用的公共 search API
   cli.py         # CLI 参数与帮助面板
   core/
     config.py    # 通用配置目录与 JSON 配置读写
@@ -298,6 +327,7 @@ daily_cli/
 
 - CLI 只负责参数解析和输出
 - source / filter / enricher 都能单独演进
+- `collect_search` 可以被其他场景直接复用，不必绕 CLI
 - 新增一个 topic 时，尽量只需要加注册表配置
 
 ## 开发

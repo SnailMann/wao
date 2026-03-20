@@ -58,6 +58,9 @@ US_MARKET_KEYWORDS = (
     "股指",
 )
 
+SEARCH_DEFAULT_SOURCE = "google"
+SEARCH_SOURCE_CHOICES = ("auto", "google", "x", "x-user", "x-news", "all")
+
 
 @dataclass(frozen=True)
 class SourcePlan:
@@ -159,17 +162,6 @@ TOPIC_SPECS = {
         default_limit=10,
         default_excluded_labels=(),
     ),
-    "x": TopicSpec(
-        key="x",
-        label="X 用户动态",
-        description="通过 X 官方 API v2 获取指定用户最近公开发推内容；需要先配置 Bearer Token。",
-        source_plans=(
-            SourcePlan(source="x", mode="user_tweets"),
-        ),
-        default_sources=("x",),
-        default_limit=10,
-        default_excluded_labels=(),
-    ),
 }
 
 
@@ -188,11 +180,31 @@ def list_topic_keys() -> tuple[str, ...]:
     return tuple(TOPIC_SPECS)
 
 
-def build_search_topic(query: str, locale: str) -> TopicSpec:
+def build_search_topic(query: str, locale: str, source: str = "auto") -> TopicSpec:
+    if source == "x-user":
+        normalized_user = query.strip().lstrip("@")
+        if not normalized_user:
+            raise ValueError("`daily search --source x-user` 需要传入用户名，例如 `daily search elonmusk --source x-user`")
+        return TopicSpec(
+            key="search",
+            label=f'X 用户发推: "@{normalized_user}"',
+            description="按用户名通过 X 官方 API 获取最近公开发推内容。",
+            source_plans=(
+                SourcePlan(
+                    source="x-user",
+                    mode="user_posts",
+                    query=normalized_user,
+                ),
+            ),
+            default_sources=("x-user",),
+            default_limit=5,
+            default_excluded_labels=(),
+        )
+
     return TopicSpec(
         key="search",
         label=f'自定义查询: "{query}"',
-        description="按用户查询进行 Google News 检索。",
+        description="按用户查询进行 Google News、X recent search 或 X news search 检索。",
         source_plans=(
             SourcePlan(
                 source="google",
@@ -200,31 +212,19 @@ def build_search_topic(query: str, locale: str) -> TopicSpec:
                 query=query,
                 locale=locale,
             ),
+            SourcePlan(
+                source="x",
+                mode="search_recent",
+                query=query,
+            ),
+            SourcePlan(
+                source="x-news",
+                mode="news_search",
+                query=query,
+            ),
         ),
         default_sources=("google",),
         default_limit=5,
-        default_excluded_labels=(),
-    )
-
-
-def build_x_topic(username: str) -> TopicSpec:
-    normalized = username.strip().lstrip("@")
-    if not normalized:
-        raise ValueError("fetch x 需要通过 --x-user 指定用户名，例如 `daily fetch x --x-user elonmusk`")
-
-    return TopicSpec(
-        key="x",
-        label=f"X 用户: @{normalized}",
-        description=f"通过 X 官方 API 获取 @{normalized} 最近公开发推内容。",
-        source_plans=(
-            SourcePlan(
-                source="x",
-                mode="user_tweets",
-                query=normalized,
-            ),
-        ),
-        default_sources=("x",),
-        default_limit=10,
         default_excluded_labels=(),
     )
 

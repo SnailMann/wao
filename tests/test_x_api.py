@@ -12,7 +12,7 @@ from daily_cli.core.x_auth import (
     save_x_bearer_token,
     x_token_file,
 )
-from daily_cli.runtime.x_api import fetch_x_user_tweets
+from daily_cli.runtime.x_api import fetch_x_news_search, fetch_x_recent_search, fetch_x_user_tweets
 
 
 class XAuthTests(unittest.TestCase):
@@ -87,3 +87,63 @@ class XApiTests(unittest.TestCase):
         self.assertEqual(items[0].language, "en")
         self.assertIn("赞 120", items[0].tags)
         self.assertIn("Starship update", items[0].title)
+
+    @patch("daily_cli.runtime.x_api._fetch_x_json")
+    def test_fetch_x_recent_search(self, mocked_fetch_x_json) -> None:
+        mocked_fetch_x_json.return_value = {
+            "data": [
+                {
+                    "id": "1900000000000000020",
+                    "text": "OpenAI ships a new multimodal release today.",
+                    "created_at": "2026-03-20T02:30:00.000Z",
+                    "lang": "en",
+                    "author_id": "123",
+                    "public_metrics": {
+                        "like_count": 88,
+                        "retweet_count": 21,
+                        "reply_count": 9,
+                        "quote_count": 3,
+                    },
+                }
+            ],
+            "includes": {
+                "users": [
+                    {
+                        "id": "123",
+                        "name": "X Dev",
+                        "username": "xdev",
+                    }
+                ]
+            },
+        }
+
+        items = fetch_x_recent_search("OpenAI", limit=5, timeout=5.0, category="search")
+
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].feed, "X Search")
+        self.assertEqual(items[0].publisher, "X Dev (@xdev)")
+        self.assertEqual(items[0].search_query, "OpenAI")
+        self.assertIn("/status/1900000000000000020", items[0].link)
+
+    @patch("daily_cli.runtime.x_api._fetch_x_json")
+    def test_fetch_x_news_search(self, mocked_fetch_x_json) -> None:
+        mocked_fetch_x_json.return_value = {
+            "data": [
+                {
+                    "id": "news-1",
+                    "name": "OpenAI unveils new reasoning system",
+                    "summary": "A new release was announced at a live event.",
+                    "category": "Technology",
+                    "updated_at": "2026-03-20T04:30:00.000Z",
+                }
+            ]
+        }
+
+        items = fetch_x_news_search("OpenAI", limit=5, timeout=5.0, category="search")
+
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].provider, "x-news")
+        self.assertEqual(items[0].feed, "X News")
+        self.assertEqual(items[0].title, "OpenAI unveils new reasoning system")
+        self.assertIn("Technology", items[0].tags)
+        self.assertEqual(items[0].search_query, "OpenAI")

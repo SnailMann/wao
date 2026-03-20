@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+from html import unescape
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import quote_plus, urlencode
 from urllib.request import Request, urlopen
 
 from ..core.models import NewsItem
@@ -110,6 +111,11 @@ def _tweet_title_and_summary(text: str) -> tuple[str, str]:
     return cleaned[:107].rstrip() + "...", cleaned
 
 
+def _strip_x_html(value: str) -> str:
+    cleaned = unescape(value or "")
+    return " ".join(cleaned.split()).strip()
+
+
 def fetch_x_user_tweets(
     username: str,
     *,
@@ -176,6 +182,164 @@ def fetch_x_user_tweets(
                 rank=rank,
                 language=str(entry.get("lang") or ""),
                 tags=tags,
+            )
+        )
+        if len(items) >= limit:
+            break
+
+    return items
+
+
+def fetch_x_recent_search(
+    query: str,
+    *,
+    limit: int,
+    timeout: float,
+    category: str,
+) -> list[NewsItem]:
+    payload = _fetch_x_json(
+        f"{X_API_BASE}/tweets/search/recent",
+        params={
+            "query": query,
+            "max_results": str(max(10, min(limit, 100))),
+            "sort_order": "relevancy",
+            "expansions": "author_id",
+            "tweet.fields": "created_at,lang,public_metrics,author_id",
+            "user.fields": "name,username,verified",
+        },
+        timeout=timeout,
+    )
+
+    data = payload.get("data")
+    if data is None:
+        errors = payload.get("errors") or []
+        if errors:
+            message = errors[0].get("detail") or errors[0].get("message") or "unknown error"
+            raise FetchError(f"X Search 获取失败: {message}")
+        return []
+    if not isinstance(data, list):
+        raise FetchError("X Search 接口返回了无效数据")
+
+    user_lookup: dict[str, dict] = {}
+    includes = payload.get("includes") or {}
+    users = includes.get("users") or []
+    if isinstance(users, list):
+        for user in users:
+            user_id = str(user.get("id") or "").strip()
+            if user_id:
+                user_lookup[user_id] = user
+
+    items: list[NewsItem] = []
+    for rank, entry in enumerate(data, start=1):
+        tweet_id = str(entry.get("id") or "").strip()
+        text = str(entry.get("text") or "").strip()
+        title, summary = _tweet_title_and_summary(text)
+        if not tweet_id or not title:
+            continue
+
+        author = user_lookup.get(str(entry.get("author_id") or "").strip(), {})
+        username = str(author.get("username") or "").strip()
+        display_name = str(author.get("name") or username or "X").strip()
+
+        metrics = entry.get("public_metrics") or {}
+        tags: list[str] = []
+        if metrics.get("like_count") is not None:
+            tags.append(f"赞 {metrics['like_count']}")
+        if metrics.get("retweet_count") is not None:
+            tags.append(f"转推 {metrics['retweet_count']}")
+        if metrics.get("reply_count") is not None:
+            tags.append(f"回复 {metrics['reply_count']}")
+        if metrics.get("quote_count") is not None:
+            tags.append(f"引用 {metrics['quote_count']}")
+
+        if username:
+            link = f"https://x.com/{username}/status/{tweet_id}"
+            publisher = f"{display_name} (@{username})"
+        else:
+            link = f"https://x.com/i/web/status/{tweet_id}"
+            publisher = display_name
+
+        items.append(
+            NewsItem(
+                title=title,
+                category=category,
+                provider="x",
+                feed="X Search",
+                publisher=publisher,
+                summary=summary,
+                link=link,
+                published_at=format_pub_date(str(entry.get("created_at") or "")),
+                rank=rank,
+                language=str(entry.get("lang") or ""),
+                search_query=query,
+                tags=tags,
+            )
+        )
+        if len(items) >= limit:
+            break
+
+    return items
+
+
+def fetch_x_news_search(
+    query: str,
+    *,
+    limit: int,
+    timeout: float,
+    category: str,
+) -> list[NewsItem]:
+    payload = _fetch_x_json(
+        f"{X_API_BASE}/news/search",
+        params={
+            "query": query,
+            "max_results": str(max(1, min(limit, 100))),
+            "max_age_hours": "24",
+            "news.fields": "id,name,summary,hook,category,keywords,contexts,cluster_posts_results,updated_at",
+        },
+        timeout=timeout,
+    )
+
+    data = payload.get("data")
+    if data is None:
+        errors = payload.get("errors") or []
+        if errors:
+            message = errors[0].get("detail") or errors[0].get("message") or "unknown error"
+            raise FetchError(f"X News Search 获取失败: {message}")
+        return []
+    if not isinstance(data, list):
+        raise FetchError("X News Search 接口返回了无效数据")
+
+    items: list[NewsItem] = []
+    for rank, entry in enumerate(data, start=1):
+        title = _strip_x_html(str(entry.get("name") or ""))
+        if not title:
+            continue
+
+        summary = _strip_x_html(
+            str(entry.get("summary") or "") or str(entry.get("hook") or "")
+        )
+        news_id = str(entry.get("id") or entry.get("rest_id") or "").strip()
+        link_query = title or query
+
+        tags: list[str] = []
+        category_name = _strip_x_html(str(entry.get("category") or ""))
+        if category_name:
+            tags.append(category_name)
+
+        items.append(
+            NewsItem(
+                title=title,
+                category=category,
+                provider="x-news",
+                feed="X News",
+                publisher="X News",
+                summary=summary,
+                link=f"https://x.com/search?q={quote_plus(link_query)}&src=typed_query",
+                published_at=format_pub_date(str(entry.get("updated_at") or entry.get("last_updated_at_ms") or "")),
+                rank=rank,
+                search_query=query,
+                tags=tags,
+                hot_score=news_id,
             )
         )
         if len(items) >= limit:

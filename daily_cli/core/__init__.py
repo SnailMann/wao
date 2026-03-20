@@ -11,7 +11,7 @@ from .subscriptions import (
     remove_subscription,
     resolve_subscriptions,
 )
-from .topics import DEFAULT_SUMMARY_TOPICS, TopicSpec, build_x_topic, list_topic_keys, list_topics
+from .topics import DEFAULT_SUMMARY_TOPICS, SEARCH_SOURCE_CHOICES, TopicSpec, build_search_topic, list_topic_keys, list_topics
 
 __all__ = [
     "DEFAULT_SUMMARY_TOPICS",
@@ -21,8 +21,9 @@ __all__ = [
     "add_subscription",
     "build_preview_topic",
     "build_subscription_topic",
+    "SEARCH_SOURCE_CHOICES",
     "TopicSpec",
-    "build_x_topic",
+    "build_search_topic",
     "collect_search",
     "collect_summary",
     "collect_topic",

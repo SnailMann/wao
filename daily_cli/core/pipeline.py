@@ -9,9 +9,9 @@ from ..runtime.sources import FetchError, contains_cjk, local_now_string, normal
 from .models import NewsItem, SectionResult
 from .topics import (
     DEFAULT_SUMMARY_TOPICS,
+    SEARCH_DEFAULT_SOURCE,
     TopicSpec,
     build_search_topic,
-    build_x_topic,
     get_source_plan,
     get_topic,
     resolve_sources,
@@ -331,7 +331,6 @@ def collect_topics(
     source: str,
     limit: int | None,
     timeout: float,
-    x_user: str | None = None,
     semantic_enabled: bool = True,
     semantic_filter: bool = True,
     excluded_labels: tuple[str, ...] | None = None,
@@ -341,9 +340,8 @@ def collect_topics(
     body_timeout: float = 15.0,
     body_max_chars: int = 4000,
 ) -> list[SectionResult]:
-    specs = [build_x_topic(x_user or "") if key == "x" else get_topic(key) for key in keys]
     return collect_topic_specs(
-        specs,
+        [get_topic(key) for key in keys],
         source=source,
         limit=limit,
         timeout=timeout,
@@ -364,7 +362,6 @@ def collect_topic(
     source: str,
     limit: int | None,
     timeout: float,
-    x_user: str | None = None,
     semantic_enabled: bool = True,
     semantic_filter: bool = True,
     excluded_labels: tuple[str, ...] | None = None,
@@ -375,7 +372,7 @@ def collect_topic(
     body_max_chars: int = 4000,
 ) -> SectionResult:
     return collect_topic_specs(
-        [build_x_topic(x_user or "") if key == "x" else get_topic(key)],
+        [get_topic(key)],
         source=source,
         limit=limit,
         timeout=timeout,
@@ -425,6 +422,7 @@ def collect_search(
     query: str,
     limit: int,
     timeout: float,
+    source: str,
     google_locale: str,
     semantic_enabled: bool = True,
     semantic_filter: bool = True,
@@ -439,9 +437,11 @@ def collect_search(
     if resolved_locale == "auto":
         resolved_locale = "cn" if contains_cjk(query) else "us"
 
+    requested_source = SEARCH_DEFAULT_SOURCE if source == "auto" else source
+
     return collect_topic_specs(
-        [build_search_topic(query, resolved_locale)],
-        source="google",
+        [build_search_topic(query, resolved_locale, source=requested_source)],
+        source=source if source != "auto" else "auto",
         limit=limit,
         timeout=timeout,
         semantic_enabled=semantic_enabled,
