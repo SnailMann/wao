@@ -2,13 +2,9 @@ from __future__ import annotations
 
 import unittest
 
-from daily_cli.runtime.sources import (
-    filter_items_by_keywords,
-    parse_baidu_realtime_html,
-    parse_github_trending_html,
-    parse_google_news_rss,
-    parse_google_trends_rss,
-)
+from daily_cli.fetchers.baidu import filter_items_by_keywords, parse_baidu_realtime_html
+from daily_cli.fetchers.github import parse_github_trending_html
+from daily_cli.fetchers.google import parse_google_news_rss, parse_google_trends_rss
 
 
 GOOGLE_TRENDS_SAMPLE = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>

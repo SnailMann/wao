@@ -8,7 +8,7 @@ from urllib.request import Request, urlopen
 
 from ..core.models import NewsItem
 from ..core.x_auth import resolve_x_bearer_token
-from .sources import DEFAULT_HEADERS, FetchError, format_pub_date
+from .common import DEFAULT_HEADERS, FetchError, format_pub_date
 
 X_API_BASE = "https://api.x.com/2"
 

@@ -1,129 +1,85 @@
-# daily 资讯聚合与过滤设计
+# daily News Pipeline
 
-本文档说明 `daily` 当前版本如何组织 topics、使用哪些公开来源、如何排序与去重、什么时候启用过滤、以及插件式结构是如何工作的。
+本文档说明 `daily` 当前如何从原子能力拼出业务结果，以及数据源、排序、过滤和回补是怎么工作的。
 
-## 1. 设计目标
+## 1. 两层模型
 
-`daily` 不是通用新闻门户，也不是全文搜索引擎。它更像一个面向命令行的每日信号面板，强调：
+### 原子能力层
 
-- 公开可访问的数据源
-- 尽量稳定的抓取方式
-- 快速查看而不是重型部署
-- 默认轻量、可选增强
-- 易扩展的 topic / provider / filter / enricher 架构
+- `daily trend`
+- `daily search`
+- `daily rss`
 
-## 2. 代码结构
+这些命令只负责“标准化获取信息”。
 
-当前项目按职责拆成多层：
+### 组合业务层
 
-### 2.1 `core/topics.py`
+- `daily summary`
+- `daily fetch`
 
-负责定义 topic 注册表。每个 topic 会描述：
+这些命令只负责“把若干来源和默认规则组织成业务 topic”。
 
-- key
-- label
-- description
-- source plans
-- default sources
-- default limit
-- default excluded labels
-- optional refill plan
+## 2. 当前原子能力
 
-### 2.2 `plugins/providers.py`
+### 2.1 trend
 
-负责 source 插件注册表。当前内置：
+统一热榜源：
 
 - `google`
+  - Google Trends RSS
 - `baidu`
+  - 百度热榜结构化数据
 - `github`
+  - GitHub Trending
+
+`daily trend --source all` 会输出多个 section，不做强行混排。
+
+### 2.2 search
+
+统一检索源：
+
+- `google`
+  - Google News RSS search
 - `x`
+  - X recent search
 - `x-user`
+  - X user posts
 - `x-news`
-- `rsshub`
-- `feed`
+  - X news search
 
-每个 source 再按 mode 派发到具体抓取实现，例如：
+`daily search --source all` 会把：
 
-- `google:trends_us`
-- `google:news_search`
-- `google:news_top`
-- `baidu:hotboard`
-- `baidu:keyword_hotboard`
-- `github:trending`
-- `x:search_recent`
-- `x-user:user_posts`
-- `x-news:news_search`
-- `rsshub:route`
-- `feed:url`
+- `google`
+- `x`
+- `x-news`
 
-### 2.3 `plugins/filters.py`
+按轮询方式混排并去重。`x-user` 不参与 `all`，因为它是用户名语义，不是关键词检索语义。
 
-负责过滤模式注册表。当前内置：
+### 2.3 rss
 
-- `tfidf`
-- `model`
+统一 feed 能力：
 
-### 2.4 `plugins/enrichers.py`
+- RSSHub route
+- 普通 RSS / Atom URL
 
-负责结果增强插件。当前内置：
+它既支持一次性抓取，也支持保存后批量拉取：
 
-- `body`
+- `daily rss fetch ...`
+- `daily rss add ...`
+- `daily rss pull`
 
-### 2.5 `core/pipeline.py`
+## 3. 当前业务 Topic
 
-负责把 topic、provider、filter、enricher 串起来，统一处理：
+| Topic | 默认来源 | 默认数量 | 默认过滤 |
+| --- | --- | --- | --- |
+| `us-hot` | `google` | `5` | `soft` |
+| `china-hot` | `baidu` | `5` | `soft` |
+| `ai` | `google + baidu` | `5` | 无 |
+| `finance` | `google + baidu` | `5` | 无 |
+| `us-market` | `google + baidu` | `5` | 无 |
+| `github` | `github` | `10` | 无 |
 
-- 抓取
-- 合并
-- 去重
-- 分类
-- 过滤
-- 回补
-- 正文增强
-
-### 2.6 `core/subscriptions.py` / `runtime/rsshub.py`
-
-负责 RSSHub 与普通 RSS/Atom 订阅能力：
-
-- 解析 `rsshub://...` 自定义地址
-- 解析普通 `https://...` feed 地址
-- 生成真实 RSSHub feed URL
-- 把订阅保存到本地配置
-- 把订阅映射成动态 TopicSpec，再复用现有管线
-
-### 2.7 `core/x_auth.py` / `runtime/x_api.py`
-
-负责 X 官方 API 能力：
-
-- 保存或读取 X Bearer Token
-- 优先从环境变量 `X_BEARER_TOKEN` 读取
-- 通过 X 官方 API v2 拉取 recent search、news search 和用户公开发推
-- 把 tweet 数据映射成统一 `NewsItem`
-
-### 2.8 `daily_cli/search.py`
-
-提供可复用的公共搜索入口：
-
-- `collect_search`
-- `build_search_topic`
-- `SEARCH_SOURCE_CHOICES`
-
-这样订阅、自动化脚本或后续新入口都可以共用同一套搜索链路，而不必依赖 CLI 参数层。
-
-## 3. Topic 一览
-
-| Topic | 中文名称 | 默认来源 | 默认数量 | 默认过滤 |
-| --- | --- | --- | --- | --- |
-| `us-hot` | 美国热门事件 | `google` | `5` | `soft` |
-| `china-hot` | 中国热门事件 | `baidu` | `5` | `soft` |
-| `ai` | AI 发展 | `google + baidu` | `5` | 无 |
-| `finance` | 金融热门事件 | `google + baidu` | `5` | 无 |
-| `us-market` | 美股焦点 | `google + baidu` | `5` | 无 |
-| `github` | GitHub Trending | `github` | `10` | 无 |
-| `search` | 自定义查询 | `google` | 用户指定 | 无 |
-| `subscriptions` | RSSHub / RSS / Atom 订阅 | `rsshub` 或 `feed` | `10` | 无 |
-
-默认摘要 `summary` 会输出：
+默认 `summary` 包含：
 
 - `us-hot`
 - `china-hot`
@@ -131,11 +87,9 @@
 - `finance`
 - `github`
 
-## 4. 数据源
+## 4. 数据源明细
 
-### 4.1 Google
-
-#### `trends_us`
+### 4.1 Google Trends
 
 接口：
 
@@ -143,45 +97,29 @@
 https://trends.google.com/trending/rss?geo=US
 ```
 
-用途：
+用于：
 
+- `daily trend --source google`
 - `us-hot`
 
-特点：
-
-- 更适合表示“今天美国在搜什么”
-- 标题通常更短、更像趋势词而不是完整新闻标题
-
-#### `news_search`
+### 4.2 Google News
 
 接口：
 
 ```text
 https://news.google.com/rss/search?q=...&hl=...&gl=...&ceid=...
+https://news.google.com/rss?hl=...&gl=...&ceid=...
 ```
 
-用途：
+用于：
 
+- `daily search --source google`
 - `ai`
 - `finance`
 - `us-market`
-- `search`
+- `us-hot` 回补
 
-#### `news_top`
-
-接口：
-
-```text
-https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en
-```
-
-用途：
-
-- 仅用作 `us-hot` 的回补源
-
-### 4.2 Baidu
-
-#### `hotboard`
+### 4.3 百度热榜
 
 页面：
 
@@ -189,31 +127,13 @@ https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en
 https://top.baidu.com/board?tab=realtime
 ```
 
-用途：
+用于：
 
+- `daily trend --source baidu`
 - `china-hot`
+- `ai` / `finance` / `us-market` 的关键词过滤补充
 
-实现：
-
-- 不依赖 DOM class
-- 直接解析页面里的结构化数据块
-
-#### `keyword_hotboard`
-
-用途：
-
-- `ai`
-- `finance`
-- `us-market`
-
-实现：
-
-1. 先抓百度热榜
-2. 再基于关键词做二次过滤
-
-### 4.3 GitHub
-
-#### `trending`
+### 4.4 GitHub Trending
 
 页面：
 
@@ -221,352 +141,163 @@ https://top.baidu.com/board?tab=realtime
 https://github.com/trending
 ```
 
-用途：
+用于：
 
+- `daily trend --source github`
 - `github`
 
-输出字段：
-
-- 仓库名
-- 描述
-- 语言
-- Stars
-- Forks
-- 今日新增 Stars
-
-### 4.4 RSSHub
-
-用途：
-
-- `subscriptions`
-- 后续也可扩展成普通自定义 feed 路由
-
-当前支持的订阅格式：
-
-```text
-rsshub://twitter/user/elonmusk
-```
-
-解析规则：
-
-```text
-rsshub://twitter/user/elonmusk
-=> route: /twitter/user/elonmusk
-=> default instance: https://rsshub.app
-=> final URL: https://rsshub.app/twitter/user/elonmusk
-```
-
-如果你有自己的 RSSHub 实例，也可以在 CLI 层通过 `--instance` 指定。
-
-### 4.5 X User Posts
+### 4.5 X API
 
 接口：
 
 ```text
-GET https://api.x.com/2/users/by/username/:username
-GET https://api.x.com/2/users/:id/tweets
+GET /2/tweets/search/recent
+GET /2/users/by/username/:username
+GET /2/users/:id/tweets
+GET /2/news/search
 ```
 
-用途：
+用于：
 
-- `search --source x-user`
+- `daily search --source x`
+- `daily search --source x-user`
+- `daily search --source x-news`
 
-实现：
+### 4.6 RSSHub / RSS / Atom
 
-1. 先根据用户名查询用户 ID
-2. 再拉取该用户最近公开发推
-3. 默认排除 retweets 和 replies，减少噪声
-4. 使用 Bearer Token 做只读认证
+用于：
 
-说明：
+- `daily rss`
 
-- `x-user` 不是独立 topic，而是 `daily search` 的一个来源
-- 需要先运行 `daily x login` 或设置 `X_BEARER_TOKEN`
+当前支持：
 
-### 4.6 X Search / X News Search
+- `rsshub://twitter/user/elonmusk`
+- `https://36kr.com/feed`
 
-用途：
+## 5. 排序与去重
 
-- `search --source x`
-- `search --source x-user`
-- `search --source x-news`
-- `search --source all`
+### 单来源
 
-实现：
+单来源保留上游顺序，再做标题去重。
 
-1. `x` 使用 `GET /2/tweets/search/recent`
-2. `x-user` 使用 `GET /2/users/by/username/:username` + `GET /2/users/:id/tweets`
-3. `x-news` 使用 `GET /2/news/search`
-4. `search --source all` 会把 `google + x + x-news` 做轮询合并和标题去重
+### 多来源
 
-说明：
+多来源使用轮询合并：
 
-- `x` 是“搜帖子”
-- `x-user` 是“按用户名拉公开发推”
-- `x-news` 是“搜新闻故事”
-- `search` 默认仍然是 `google`
+1. 先取每个来源第 1 条
+2. 再取每个来源第 2 条
+3. 依次继续
 
-### 4.7 普通 RSS / Atom Feed
+这样能避免一个来源完全淹没其他来源。
 
-用途：
+### 去重
 
-- `subscriptions`
-
-当前支持直接订阅公开 RSS / Atom 地址，例如：
-
-```text
-https://36kr.com/feed
-```
-
-解析方式：
-
-- 直接把 URL 当作 feed 源抓取
-- 复用统一的 RSS / Atom 解析逻辑
-- 不需要 `--instance`
-
-## 5. Topic 是怎么定义的
-
-### 5.1 来源定义型 topic
-
-这类 topic 的边界主要由来源决定：
-
-- `us-hot`
-- `china-hot`
-- `github`
-
-其中：
-
-- `us-hot` 的主来源是 Google Trends US
-- `china-hot` 的主来源是百度热榜
-- `github` 的主来源是 GitHub Trending
-
-### 5.2 查询定义型 topic
-
-这类 topic 的边界主要由查询词或关键词决定：
-
-- `ai`
-- `finance`
-- `us-market`
-- `search`
-
-### 5.3 订阅定义型 topic
-
-这类内容不是内置静态 topic，而是用户自己保存的动态订阅。
-
-当前实现：
-
-1. 用户保存 `rsshub://...` 或 `https://...` 地址
-2. 本地配置里记录 route、instance、name、key
-3. 运行时把订阅映射成一个动态 `TopicSpec`
-4. 再复用统一的 `pipeline.py`
-
-例如：
-
-- `ai` 通过固定 Google News 查询词定义边界
-- `finance` 通过固定金融查询词定义边界
-- `us-market` 通过美股查询词定义边界
-- `search` 直接使用用户输入的查询词
-- `search --source x-user` 会把用户输入直接当成 X 用户名
-
-## 6. 多来源排序与去重
-
-### 6.1 单来源
-
-单来源 topic 会保留上游原始顺序，再做标题去重。
-
-### 6.2 多来源
-
-当一个 topic 同时使用多个来源时，`daily` 会按“轮询合并”方式混排：
-
-1. 先取每个来源的第 1 条
-2. 再取每个来源的第 2 条
-3. 以此类推
-
-这样做的目的：
-
-- 避免某一个来源完全淹没其他来源
-- 让最终结果更像“混合信号流”
-
-### 6.3 去重
-
-去重规则基于标准化标题：
+去重基于标准化标题：
 
 - 折叠空白
-- 去掉首尾空格
-- 转小写比较
+- 去首尾空格
+- 小写比较
 
-如果标准化标题重复，则只保留第一次出现的条目。
+## 6. 过滤链路
 
-## 7. 过滤链路
+### 默认启用范围
 
-### 7.1 默认是否启动过滤
-
-默认仅这两个 topic 会启动过滤：
+默认只有：
 
 - `us-hot`
 - `china-hot`
 
-默认过滤标签：
+会自动过滤 `soft`。
 
-- `soft`
+这些内容默认只抓取，不自动过滤：
 
-这些 topic 默认不自动分类：
-
+- `daily trend`
+- `daily search`
+- `daily rss`
 - `ai`
 - `finance`
 - `us-market`
 - `github`
-- `search`
 
-它们只有在显式传入 `--exclude-label` 时，才会进入分类和过滤链路。
+只有显式传入 `--exclude-label` 时，才会启动过滤。
 
-### 7.2 为什么不是所有 topic 都默认过滤
+### 候选放大
 
-因为分类本身有成本：
-
-- 要抓更多候选
-- 要跑打标
-- 还可能误伤高价值内容
-
-所以当前策略是：
-
-- 杂讯最多的 `us-hot` / `china-hot` 默认过滤
-- 其他更专题化的 topic 默认不动
-
-### 7.3 候选放大
-
-一旦启用过滤，抓取阶段不会只抓最终 `limit`，而是先抓更多候选：
+只要启用过滤，就不是只抓最终 `limit`，而是先抓更多候选：
 
 ```text
 max(limit * 3, limit + 8)
 ```
 
-这样做是为了在过滤掉一部分内容后，仍然有机会补足结果数量。
+### 回补
 
-## 8. 过滤模式
+当前只有 `us-hot` 配置了回补：
 
-### 8.1 `tfidf`
+- 主来源：Google Trends
+- 回补来源：Google News Top Stories
 
-这是默认模式，也是开源分发时的推荐模式。
+当过滤后数量不足时，会按需拉 Google News 补量。
 
-内部由三部分组成：
+## 7. 插件层
 
-- `TF-IDF`
-- `LogisticRegression`
-- 少量中英文词表 / 短语信号
+### filter
 
-训练语料来源：
+负责“怎么打标签、怎么过滤”。
 
-- 由 `model` 模式生成的一批伪标签样本
-- 补充的少量人工构造样本
+当前内置：
 
-适合：
+- `tfidf`
+- `model`
 
-- 默认安装
-- 启动更快
-- 无需提前下载大模型
+## 8. Fetcher 层
 
-### 8.2 `model`
+Fetcher 负责“从哪取、怎么取正文”。
 
-使用：
+当前按来源拆分：
 
-```text
-intfloat/multilingual-e5-small
-```
+- `google`
+- `baidu`
+- `github`
+- `x`
+- `rss`
+- `body`
 
-适合：
+其中浏览器型正文抓取进一步拆到了：
 
-- 需要更强语义能力
-- 愿意接受更高的模型下载和运行成本
+- `fetchers/crawlers/base.py`
+- `fetchers/crawlers/playwright.py`
 
-## 9. 标签体系
+## 9. 正文抓取
 
-当前标签保持少量且稳定：
+传入 `--fetch-body` 后，正文抓取只会发生在最终保留结果上。
 
-- `macro`
-- `industry`
-- `tech`
-- `public`
-- `soft`
+当前策略：
 
-其中 `soft` 表示：
+- 通过 `fetchers/body.py` 统一编排
+- 具体浏览器实现由 `fetchers/crawlers/playwright.py` 提供
+- 使用 Playwright Chromium 无头模式
+- 优先处理 Google News 跳转
+- 优先抽 `article` / `main`
+- 抽不到再回退 `body.innerText`
 
-- 猎奇
-- 八卦
-- 情绪化个体故事
-- 流量型社会新闻
-- 缺少明显公共价值或认知增量的内容
+当前限制：
 
-## 10. 回补逻辑
+- 某些站点会触发验证页
+- `github` 默认不抓正文
 
-当前只有 `us-hot` 配置了回补。
+## 10. 代码对应关系
 
-逻辑如下：
-
-1. 先抓 Google Trends US
-2. 如果默认 `soft` 过滤后不足 `limit`
-3. 再抓 Google News Top Stories
-4. 对回补条目继续做同样的分类和过滤
-5. 只追加未重复且未被过滤掉的结果
-
-订阅内容当前都不做自动回补。
-
-这样可以缓解 Google Trends 标题过短、娱乐噪声偏多的问题。
-
-## 11. 正文抓取
-
-启用 `--fetch-body` 后，正文抓取只会发生在：
-
-- 抓取完成后
-- 过滤完成后
-- 回补完成后
-- 最终保留的结果上
-
-正文抓取当前使用 Playwright Chromium：
-
-- 支持等待 Google News 跳转到真实文章页
-- 优先抽取 `article` / `main`
-- 失败时回退到 `body.innerText`
-
-已知边界：
-
-- 站点验证码
-- 访问验证页
-- 订阅墙
-- 某些新闻站的客户端渲染页面
-- 某些 RSSHub 公共实例未必启用所有路由
-- 某些 RSSHub 路由可能依赖实例端额外配置，而不是 CLI 端配置
-- 某些普通 feed 可能会返回 HTML 而不是有效 RSS / Atom XML
-
-## 12. 失败与降级
-
-当某个来源失败时：
-
-- 不会让整个命令失败
-- 会把失败原因写进该 section 的 warnings
-- 如果其他来源仍然成功，结果照常返回
-
-例如：
-
-- 某个 Google RSS 请求超时
-- Baidu 热榜当前不可用
-- GitHub Trending 当天只解析到少量条目
-- 正文抓取命中验证页
-
-## 13. 为什么采用插件式结构
-
-因为这个项目的扩展点非常明确：
-
-- 新增 topic
-- 新增 source
-- 新增 filter
-- 新增 enricher
-
-当前结构让这些变化更容易做到局部修改：
-
-- 加一个 topic，优先改 `core/topics.py`
-- 加一个来源模式，优先改 `plugins/providers.py`
-- 加一个过滤后端，优先改 `plugins/filters.py`
-- 加一个增强能力，优先改 `plugins/enrichers.py`
-
-这样可以避免把所有逻辑继续堆回一个巨大的 `service.py` 里。
+- 原子公共入口：
+  - `daily_cli/tools/search.py`
+  - `daily_cli/tools/trend.py`
+  - `daily_cli/tools/rss.py`
+- collector 门面：
+  - `daily_cli/core/collector.py`
+- 业务 topic 定义：
+  - `daily_cli/core/topics.py`
+- 过滤插件：
+  - `daily_cli/plugins/`
+- 数据抓取与正文抓取：
+  - `daily_cli/fetchers/`
+- 通用配置与输出：
+  - `daily_cli/common/`

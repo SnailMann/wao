@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "daily"
-version = "0.2.0"
-description = "A command-line dashboard for daily topics, news signals, and GitHub trending projects."
+version = "0.3.0"
+description = "A layered command-line toolkit for daily trends, search, RSS, and curated news workflows."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [

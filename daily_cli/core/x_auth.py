@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 
-from .config import config_file, read_json_file, write_json_file
+from ..common.config import config_file, read_json_file, write_json_file
 
 X_TOKEN_ENV_VARS = ("X_BEARER_TOKEN", "TWITTER_BEARER_TOKEN")
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from daily_cli.search import SEARCH_SOURCE_CHOICES, build_search_topic
+from daily_cli.tools.search import SEARCH_SOURCE_CHOICES, build_search_topic
 
 
 class SearchApiTests(unittest.TestCase):

@@ -12,7 +12,7 @@ from daily_cli.core.x_auth import (
     save_x_bearer_token,
     x_token_file,
 )
-from daily_cli.runtime.x_api import fetch_x_news_search, fetch_x_recent_search, fetch_x_user_tweets
+from daily_cli.fetchers.x import fetch_x_news_search, fetch_x_recent_search, fetch_x_user_tweets
 
 
 class XAuthTests(unittest.TestCase):
@@ -48,7 +48,7 @@ class XAuthTests(unittest.TestCase):
 
 
 class XApiTests(unittest.TestCase):
-    @patch("daily_cli.runtime.x_api._fetch_x_json")
+    @patch("daily_cli.fetchers.x._fetch_x_json")
     def test_fetch_x_user_tweets(self, mocked_fetch_x_json) -> None:
         mocked_fetch_x_json.side_effect = [
             {
@@ -88,7 +88,7 @@ class XApiTests(unittest.TestCase):
         self.assertIn("赞 120", items[0].tags)
         self.assertIn("Starship update", items[0].title)
 
-    @patch("daily_cli.runtime.x_api._fetch_x_json")
+    @patch("daily_cli.fetchers.x._fetch_x_json")
     def test_fetch_x_recent_search(self, mocked_fetch_x_json) -> None:
         mocked_fetch_x_json.return_value = {
             "data": [
@@ -125,7 +125,7 @@ class XApiTests(unittest.TestCase):
         self.assertEqual(items[0].search_query, "OpenAI")
         self.assertIn("/status/1900000000000000020", items[0].link)
 
-    @patch("daily_cli.runtime.x_api._fetch_x_json")
+    @patch("daily_cli.fetchers.x._fetch_x_json")
     def test_fetch_x_news_search(self, mocked_fetch_x_json) -> None:
         mocked_fetch_x_json.return_value = {
             "data": [

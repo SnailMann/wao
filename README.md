@@ -1,40 +1,67 @@
 # daily
 
-`daily` 是一个面向 Linux / macOS 的命令行资讯工具，用来快速查看每日热点、专题新闻信号、GitHub Trending，以及基于 Google / X / RSS 的跨源搜索结果。它优先使用公开、稳定、适合命令行接入的数据源，并把抓取、过滤、正文增强做成了可插拔的模块。
+`daily` 是一个面向 Linux / macOS 的资讯 CLI。它把能力分成两层：
 
-当前内置的 topics：
+- 原子能力层：`trend`、`search`、`rss`
+- 组合业务层：`summary`、`fetch`
 
-- `us-hot`：美国热门事件
-- `china-hot`：中国热门事件
-- `ai`：AI 发展
-- `finance`：金融热门事件
-- `us-market`：美股焦点
-- `github`：GitHub Trending
+这样后续新增来源、过滤器、正文增强器或新的业务 topic 时，都可以沿着同一套上层设计继续扩展。
 
-额外能力：
+## 设计概览
 
-- `search`：统一的跨源检索入口，支持 `google` / `x` / `x-user` / `x-news` / `all`
-- `subscriptions`：RSSHub 与普通 RSS/Atom 订阅内容
-- `x`：只负责配置 X Bearer Token，不再承担查询入口
+### 原子能力
 
-## 特性
+- `daily trend`
+  - 统一查看热榜源
+  - 当前支持 `google`、`baidu`、`github`
+- `daily search`
+  - 统一做检索
+  - 当前支持 `google`、`x`、`x-user`、`x-news`
+- `daily rss`
+  - 统一处理 RSSHub 与普通 RSS/Atom
+  - 支持一次性抓取，也支持保存后批量拉取
 
-- 可安装的 Python CLI，入口命令为 `daily`
-- topic、source、filter、enricher 分层注册，方便后续扩展
-- 默认轻量模式使用 `TF-IDF + LogisticRegression + 词表` 做过滤
-- 支持切换到 `intfloat/multilingual-e5-small` 的 `model` 模式
-- 默认仅 `us-hot` / `china-hot` 过滤 `soft`
-- `us-hot` 过滤后不足时，会自动回补 Google News Top Stories
-- 支持 Playwright 无头模式抓正文
-- 支持保存并拉取 RSSHub 与普通 RSS/Atom 订阅，例如 `rsshub://twitter/user/elonmusk`、`https://36kr.com/feed`
-- 支持通过 X 官方 API v2 检索帖子、新闻故事，以及按用户名获取公开发推
-- 支持文本和 JSON 两种输出
+### 组合业务
+
+- `daily summary`
+  - 输出默认 dashboard
+- `daily fetch <topic ...>`
+  - 获取一个或多个业务 topic
+- `daily topics`
+  - 查看业务 topic 定义
+
+### 插件能力
+
+- `filter`：语义分类与过滤
+
+### Fetcher 能力
+
+- `fetcher`：数据源抓取与正文抓取
+
+当前默认过滤器是 `tfidf`，可切换到 `model`。正文抓取通过 Playwright 无头浏览器抓取完成。
+
+## 内置业务 Topic
+
+- `us-hot`
+- `china-hot`
+- `ai`
+- `finance`
+- `us-market`
+- `github`
+
+默认 `summary` 输出：
+
+- `us-hot`
+- `china-hot`
+- `ai`
+- `finance`
+- `github`
 
 ## 安装
 
 要求 Python `3.10+`。
 
-轻量安装，只使用默认的 `tfidf` 过滤模式：
+基础安装：
 
 ```bash
 python3 -m pip install .
@@ -54,7 +81,7 @@ python3 -m pip install '.[body]'
 python3 -m playwright install chromium
 ```
 
-如果你想一次安装全部可选能力：
+全部能力：
 
 ```bash
 python3 -m pip install '.[all]'
@@ -65,69 +92,124 @@ daily model download
 ## 快速开始
 
 ```bash
-daily topics
+daily trend
+daily trend --source baidu --limit 20
+
+daily search "OpenAI"
+daily search "OpenAI" --source x
+daily search elonmusk --source x-user
+
+daily rss fetch https://36kr.com/feed
+daily rss add rsshub://twitter/user/elonmusk --name Elon
+daily rss pull
+
 daily summary
 daily fetch us-hot china-hot
+
 daily x login
-daily search elonmusk --source x-user
-daily subscriptions add rsshub://twitter/user/elonmusk --name Elon
-daily subscriptions add https://36kr.com/feed --name 36kr
-daily subscriptions fetch
-daily fetch github --limit 10
-daily search "人工智能" --google-locale cn
-daily search "OpenAI" --source x
-daily search "AI" --source x-news
 ```
 
-## 命令
+## 命令说明
 
-### `daily topics`
+### `daily trend`
 
-列出全部 topics、默认来源、默认数量和默认过滤策略。
+统一查看热榜源。
 
 ```bash
-daily topics
-daily topics --format json
+daily trend
+daily trend --source google
+daily trend --source baidu --limit 20
+daily trend --source all --format json
 ```
 
-### `daily summary`
+支持来源：
 
-输出默认 dashboard：
-
-- `us-hot`
-- `china-hot`
-- `ai`
-- `finance`
+- `google`
+- `baidu`
 - `github`
+- `all`
+
+默认 `auto=all`。
+
+### `daily search`
+
+统一检索新闻、帖子与 X 用户公开发推。
 
 ```bash
-daily summary
-daily summary --no-filter
-daily summary --filter-mode model
+daily search "人工智能"
+daily search "OpenAI" --source x
+daily search elonmusk --source x-user
+daily search "AI" --source x-news
+daily search "Federal Reserve" --fetch-body
 ```
 
-### `daily x`
+支持来源：
 
-配置 X Bearer Token，供 `daily search --source x|x-user|x-news` 使用。
+- `google`
+- `x`
+- `x-user`
+- `x-news`
+- `all`
+
+说明：
+
+- `--source x` 使用 X recent search
+- `--source x-user` 会把 query 当作 X 用户名
+- `--source x-news` 使用 X news search
+- `--source all` 会把 `google + x + x-news` 轮询混排并去重
+
+### `daily rss`
+
+统一处理 RSSHub 与普通 RSS/Atom。
+
+一次性抓取：
 
 ```bash
-daily x login
-daily x login <BEARER_TOKEN>
-daily x status
-daily x logout
+daily rss fetch rsshub://twitter/user/elonmusk
+daily rss fetch https://36kr.com/feed
+```
+
+保存与拉取：
+
+```bash
+daily rss add rsshub://twitter/user/elonmusk --name Elon
+daily rss add https://36kr.com/feed --name 36kr
+daily rss list
+daily rss pull
+daily rss remove twitter-user-elonmusk-xxxx
 ```
 
 说明：
 
-- `daily x login` 不传 token 时，会在终端里安全输入
-- 优先读取环境变量 `X_BEARER_TOKEN`
-- 查询公开用户发推请使用 `daily search elonmusk --source x-user`
-- 查询关键词帖子请使用 `daily search "OpenAI" --source x`
-- 查询 X 新闻故事请使用 `daily search "AI" --source x-news`
+- `rsshub://twitter/user/elonmusk` 会被解析成 RSSHub 路由 `/twitter/user/elonmusk`
+- 普通 RSS/Atom 直接使用公开 URL
+- 默认实例是 `https://rsshub.app`
+- 保存的订阅默认写到 `~/.config/daily/subscriptions.json`
+- `subscriptions` 被收进 `rss` 命令下，因为它本质上是 feed 的保存与拉取，不是独立业务域
+
+### `daily x`
+
+只负责配置 X Bearer Token。
+
+```bash
+daily x login
+daily x status
+daily x logout
+```
+
+### `daily summary`
+
+输出默认 dashboard。
+
+```bash
+daily summary
+daily summary --filter-mode model
+daily summary --fetch-body
+```
 
 ### `daily fetch`
 
-拉取一个或多个指定 topics。
+获取一个或多个业务 topic。
 
 ```bash
 daily fetch us-hot
@@ -136,199 +218,101 @@ daily fetch us-market --source all --limit 8
 daily fetch github --limit 10 --format json
 ```
 
-### `daily search`
+### `daily topics`
 
-统一的公共搜索入口。使用 Google News、X recent search、X user posts 或 X news search 按关键词或用户名查询。
+查看业务 topic 注册表。
 
 ```bash
-daily search OpenAI
-daily search "人工智能" --google-locale cn
-daily search "OpenAI" --source x
-daily search elonmusk --source x-user
-daily search "AI" --source x-news
-daily search "OpenAI" --source all
-daily search "Federal Reserve" --fetch-body
+daily topics
+daily topics --format json
 ```
 
-说明：
+## 过滤与正文增强
 
-- `search` 默认 `--source auto`，等价于 `google`
-- `--source x` 使用 X recent search
-- `--source x-user` 会把 query 当作 X 用户名，并返回该用户最近公开发推
-- `--source x-news` 使用 X news search
-- `--source all` 会把 `google + x + x-news` 混合去重后输出
+默认仅这两个 topic 会过滤 `soft`：
 
-如果你想在别的 Python 场景里复用同一条搜索链路，可以直接使用公开 API：
+- `us-hot`
+- `china-hot`
+
+过滤模式：
+
+- `tfidf`
+  - 默认模式
+  - `TF-IDF + LogisticRegression + 少量词表`
+- `model`
+  - `intfloat/multilingual-e5-small`
+  - 需要先执行 `daily model download`
+
+正文增强：
+
+- 通过 `--fetch-body` 开启
+- 只对最终保留结果抓正文
+- `github` 默认不抓正文
+
+## Python API
+
+原子能力也可以直接从 Python 调用：
 
 ```python
-from daily_cli.search import collect_search
-
-section = collect_search(
-    query="OpenAI",
-    limit=5,
-    timeout=10.0,
-    source="x",
-    google_locale="us",
-)
+from daily_cli.tools.search import collect_search
+from daily_cli.tools.trend import collect_trends
+from daily_cli.tools.rss import collect_rss
 ```
 
-### `daily subscriptions`
-
-管理 RSSHub 与普通 RSS/Atom 订阅，支持保存、列出、删除、拉取和单次预览。
-
-```bash
-daily subscriptions add rsshub://twitter/user/elonmusk --name Elon
-daily subscriptions add https://36kr.com/feed --name 36kr
-daily subscriptions list
-daily subscriptions fetch
-daily subscriptions preview rsshub://twitter/user/elonmusk --instance https://your-rsshub.example
-daily subscriptions preview https://36kr.com/feed --name 36kr
-daily subscriptions remove twitter-user-elonmusk-xxxx
-```
-
-说明：
-
-- `rsshub://twitter/user/elonmusk` 会被解析成 RSSHub 路由 `/twitter/user/elonmusk`
-- `https://36kr.com/feed` 会被当作普通 RSS/Atom feed 直接抓取
-- 默认实例是 `https://rsshub.app`
-- 如果某个公共实例不支持对应 RSSHub 路由，可以显式传入 `--instance`
-- 订阅配置默认保存在 `~/.config/daily/subscriptions.json`
-
-### `daily model download`
-
-下载 `model` 过滤模式所需的本地模型文件。
-
-```bash
-daily model download
-daily model download --force
-```
-
-## 常用参数
-
-```text
-fetch/summary: --source auto|google|baidu|github|all
-search: --source auto|google|x|x-user|x-news|all
---limit N
---timeout SECONDS
---format text|json
---filter-mode tfidf|model
---exclude-label macro|industry|tech|public|soft
---no-filter
---no-semantic
---semantic-model-dir PATH
---fetch-body
---body-timeout SECONDS
---body-max-chars N
-```
-
-补充说明：
-
-- `auto`：使用 topic 推荐的默认来源
-- `all`：聚合该 topic 支持的全部来源
-- `search` 额外支持 `--source x`、`--source x-user`、`--source x-news`
-- `search` 默认只检索，不自动分类；显式传入 `--exclude-label` 后才会启动过滤
-- `github` 默认不做分类
-- `github` 默认不抓正文
-- `subscriptions fetch` / `subscriptions preview` 默认不自动过滤；显式传入 `--exclude-label` 后才会启动分类
-
-## 默认行为
-
-- 默认仅 `us-hot` / `china-hot` 过滤 `soft`
-- `ai` / `finance` / `us-market` / `github` / `search` 默认只抓取，不自动分类
-- 开启过滤后，会额外抓取更多候选，以保证过滤后尽量补足 `limit`
-- `us-hot` 过滤后不足时，会按需用 Google News Top Stories 回补
-- `tfidf` 是默认过滤模式，更适合开箱即用和开源分发
-- `search --source x` / `x-user` / `x-news` 使用 X 官方 API v2，需要先运行 `daily x login` 或设置 `X_BEARER_TOKEN`
-- RSSHub 订阅通过 `rsshub://` 自定义地址 + 实例地址解析成真实 feed URL
-- 普通订阅直接使用公开 RSS/Atom URL，例如 `https://36kr.com/feed`
-
-## Topic 概览
-
-| Topic | 默认来源 | 默认数量 | 默认过滤 |
-| --- | --- | --- | --- |
-| `us-hot` | `google` | `5` | `soft` |
-| `china-hot` | `baidu` | `5` | `soft` |
-| `ai` | `google + baidu` | `5` | 无 |
-| `finance` | `google + baidu` | `5` | 无 |
-| `us-market` | `google + baidu` | `5` | 无 |
-| `github` | `github` | `10` | 无 |
-
-## 过滤模式
-
-### `tfidf`
-
-默认模式，内部使用：
-
-- `TF-IDF`
-- `LogisticRegression`
-- 少量中英文词表与短语信号
-
-这个模式适合：
-
-- 开源项目默认发布
-- 依赖更轻
-- 无需提前下载大模型
-- 启动更快
-
-### `model`
-
-使用 `intfloat/multilingual-e5-small` 做向量打标，适合需要更强语义能力的场景。
-
-这个模式需要：
-
-- 安装 `.[model]`
-- 先执行 `daily model download`
-
-## 正文抓取
-
-传入 `--fetch-body` 后，`daily` 会在抓取、过滤、回补都完成之后，只对最终保留的链接抓正文。
-
-当前正文抓取链路：
-
-- 使用 Playwright Chromium 无头浏览器
-- 优先等待 Google News 跳转到真实文章页
-- 抽取 `article` / `main` 等正文容器
-- 抽不到时回退到 `body.innerText`
-
-当前边界：
-
-- 某些站点会触发验证码、验证页或订阅墙
-- `github` topic 默认不抓正文
+组合能力可以继续通过业务 topic 来复用。
 
 ## 项目结构
 
 ```text
 daily_cli/
   __main__.py
-  search.py      # 可复用的公共 search API
-  cli.py         # CLI 参数与帮助面板
+  cli/
+    main.py
   core/
-    config.py    # 通用配置目录与 JSON 配置读写
-    models.py    # NewsItem / SectionResult 数据模型
-    topics.py    # topic 注册表
-    pipeline.py  # 抓取 / 过滤 / 回补 / 增强总管线
+    collector.py
+    models.py
+    specs.py
+    topics.py
     subscriptions.py
-    x_auth.py    # X Token 配置
+    x_auth.py
+  tools/
+    search.py
+    trend.py
+    rss.py
+  fetchers/
+    common.py
+    google.py
+    baidu.py
+    github.py
+    x.py
+    rss.py
+    body.py
+    crawlers/
+      base.py
+      playwright.py
+    registry.py
   plugins/
-    providers.py # source 插件注册表
-    filters.py   # filter 插件注册表
-    enrichers.py # body 等增强插件注册表
-  runtime/
-    sources.py   # 原始上游接口与解析器
-    semantic.py  # tfidf/model 两套打标实现
-    body_fetch.py
-    rsshub.py
-    x_api.py
-  renderers/
-    output.py    # text/json 输出
+    filters.py
+    semantic.py
+  common/
+    config.py
+    output.py
 ```
 
-这套结构的目标是：
+分层职责：
 
-- CLI 只负责参数解析和输出
-- source / filter / enricher 都能单独演进
-- `collect_search` 可以被其他场景直接复用，不必绕 CLI
-- 新增一个 topic 时，尽量只需要加注册表配置
+- `cli/`
+  - 命令行参数与 help 面板
+- `core/`
+  - 领域模型、topic 注册表、订阅定义、统一编排
+- `tools/`
+  - 原子工具能力：`search` / `trend` / `rss`
+- `fetchers/`
+  - 每个来源一个独立抓取文件，正文抓取再拆到 `crawlers/` 子包
+- `plugins/`
+  - 目前只保留过滤插件
+- `common/`
+  - 通用配置与输出渲染
 
 ## 开发
 
@@ -342,10 +326,12 @@ python3 -m unittest discover -s tests -v
 
 ```bash
 daily --help
-daily fetch --help
+daily trend --help
 daily search --help
+daily rss --help
 ```
 
-更详细的 topic、来源、排序、过滤和降级逻辑见：
+更多设计说明：
 
-- [docs/NEWS_PIPELINE.md](./docs/NEWS_PIPELINE.md)
+- [Architecture](./docs/ARCHITECTURE.md)
+- [News Pipeline](./docs/NEWS_PIPELINE.md)

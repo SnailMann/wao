@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+"""Business topic registry and dynamic search topic builders."""
 
-from ..runtime.semantic import DEFAULT_EXCLUDED_LABELS
+from ..plugins.semantic import DEFAULT_EXCLUDED_LABELS
+from .specs import CollectionSpec, SourcePlan, TopicSpec
 
 AI_GOOGLE_QUERY = 'AI OR "artificial intelligence" OR OpenAI OR Anthropic OR Gemini OR Nvidia'
 FINANCE_GOOGLE_QUERY = (
@@ -62,37 +63,11 @@ SEARCH_DEFAULT_SOURCE = "google"
 SEARCH_SOURCE_CHOICES = ("auto", "google", "x", "x-user", "x-news", "all")
 
 
-@dataclass(frozen=True)
-class SourcePlan:
-    source: str
-    mode: str
-    query: str = ""
-    locale: str = "us"
-    keywords: tuple[str, ...] = ()
-    endpoint: str = ""
-
-
-@dataclass(frozen=True)
-class TopicSpec:
-    key: str
-    label: str
-    description: str
-    source_plans: tuple[SourcePlan, ...]
-    default_sources: tuple[str, ...]
-    default_limit: int
-    default_excluded_labels: tuple[str, ...]
-    refill_plan: SourcePlan | None = None
-
-    @property
-    def supported_sources(self) -> tuple[str, ...]:
-        return tuple(dict.fromkeys(plan.source for plan in self.source_plans))
-
-
 DEFAULT_SUMMARY_TOPICS = ("us-hot", "china-hot", "ai", "finance", "github")
 
 
 TOPIC_SPECS = {
-    "us-hot": TopicSpec(
+    "us-hot": CollectionSpec(
         key="us-hot",
         label="美国热门事件",
         description="默认使用 Google Trends RSS，适合追踪美国当天热门搜索与事件。",
@@ -104,7 +79,7 @@ TOPIC_SPECS = {
         default_excluded_labels=DEFAULT_EXCLUDED_LABELS,
         refill_plan=SourcePlan(source="google", mode="news_top", locale="us"),
     ),
-    "china-hot": TopicSpec(
+    "china-hot": CollectionSpec(
         key="china-hot",
         label="中国热门事件",
         description="默认使用百度热榜结构化数据。",
@@ -115,7 +90,7 @@ TOPIC_SPECS = {
         default_limit=5,
         default_excluded_labels=DEFAULT_EXCLUDED_LABELS,
     ),
-    "ai": TopicSpec(
+    "ai": CollectionSpec(
         key="ai",
         label="AI 发展",
         description="聚合 Google News RSS 与百度热榜中的 AI 相关条目。",
@@ -127,7 +102,7 @@ TOPIC_SPECS = {
         default_limit=5,
         default_excluded_labels=(),
     ),
-    "finance": TopicSpec(
+    "finance": CollectionSpec(
         key="finance",
         label="金融热门事件",
         description="聚合 Google News RSS 与百度热榜中的金融类条目。",
@@ -139,7 +114,7 @@ TOPIC_SPECS = {
         default_limit=5,
         default_excluded_labels=(),
     ),
-    "us-market": TopicSpec(
+    "us-market": CollectionSpec(
         key="us-market",
         label="美股焦点",
         description="聚合 Google News 与百度热榜中的美股相关热点。",
@@ -151,7 +126,7 @@ TOPIC_SPECS = {
         default_limit=5,
         default_excluded_labels=(),
     ),
-    "github": TopicSpec(
+    "github": CollectionSpec(
         key="github",
         label="GitHub Trending",
         description="获取 GitHub Trending 项目的热门仓库信息。",
@@ -185,7 +160,7 @@ def build_search_topic(query: str, locale: str, source: str = "auto") -> TopicSp
         normalized_user = query.strip().lstrip("@")
         if not normalized_user:
             raise ValueError("`daily search --source x-user` 需要传入用户名，例如 `daily search elonmusk --source x-user`")
-        return TopicSpec(
+        return CollectionSpec(
             key="search",
             label=f'X 用户发推: "@{normalized_user}"',
             description="按用户名通过 X 官方 API 获取最近公开发推内容。",
@@ -201,7 +176,7 @@ def build_search_topic(query: str, locale: str, source: str = "auto") -> TopicSp
             default_excluded_labels=(),
         )
 
-    return TopicSpec(
+    return CollectionSpec(
         key="search",
         label=f'自定义查询: "{query}"',
         description="按用户查询进行 Google News、X recent search 或 X news search 检索。",

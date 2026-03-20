@@ -3,9 +3,9 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
+from daily_cli.core.collector import _finalize_topic_section, collect_topics
 from daily_cli.core.models import NewsItem, SectionResult
-from daily_cli.core.pipeline import _finalize_topic_section, collect_topics
-from daily_cli.runtime.semantic import TfidfLabeler
+from daily_cli.plugins.semantic import TfidfLabeler
 
 
 class StubLabeler:
@@ -128,8 +128,8 @@ class SemanticFilterTests(unittest.TestCase):
         self.assertEqual(len(result.items), 2)
         self.assertEqual(result.items[0].content_label, "soft")
 
-    @patch("daily_cli.core.pipeline.fetch_source_plan")
-    @patch("daily_cli.core.pipeline.annotate_items")
+    @patch("daily_cli.core.collector.fetch_source_plan")
+    @patch("daily_cli.core.collector.annotate_items")
     def test_collect_topics_uses_single_global_annotation_batch(
         self,
         mocked_annotate,
@@ -178,8 +178,8 @@ class SemanticFilterTests(unittest.TestCase):
         self.assertEqual(len(sections[1].items), 0)
         self.assertEqual(sections[1].filtered_count, 1)
 
-    @patch("daily_cli.core.pipeline.fetch_source_plan")
-    @patch("daily_cli.core.pipeline.annotate_items")
+    @patch("daily_cli.core.collector.fetch_source_plan")
+    @patch("daily_cli.core.collector.annotate_items")
     def test_ai_topic_does_not_trigger_semantic_by_default(
         self,
         mocked_annotate,
@@ -205,8 +205,8 @@ class SemanticFilterTests(unittest.TestCase):
         self.assertEqual(len(section.items), 1)
         self.assertEqual(section.items[0].content_label, "")
 
-    @patch("daily_cli.core.pipeline.fetch_source_plan")
-    @patch("daily_cli.core.pipeline.annotate_items")
+    @patch("daily_cli.core.collector.fetch_source_plan")
+    @patch("daily_cli.core.collector.annotate_items")
     def test_github_topic_does_not_trigger_semantic_by_default(
         self,
         mocked_annotate,
@@ -231,8 +231,8 @@ class SemanticFilterTests(unittest.TestCase):
         self.assertEqual(len(section.items), 1)
         self.assertEqual(section.items[0].content_label, "")
 
-    @patch("daily_cli.core.pipeline.fetch_source_plan")
-    @patch("daily_cli.core.pipeline.annotate_items")
+    @patch("daily_cli.core.collector.fetch_source_plan")
+    @patch("daily_cli.core.collector.annotate_items")
     def test_github_topic_triggers_semantic_when_excluded_labels_are_provided(
         self,
         mocked_annotate,
@@ -259,8 +259,8 @@ class SemanticFilterTests(unittest.TestCase):
         self.assertTrue(section.filter_enabled)
         self.assertEqual(section.filtered_count, 1)
 
-    @patch("daily_cli.core.pipeline.fetch_source_plan")
-    @patch("daily_cli.core.pipeline.annotate_items")
+    @patch("daily_cli.core.collector.fetch_source_plan")
+    @patch("daily_cli.core.collector.annotate_items")
     def test_us_hot_refills_with_google_news_after_soft_filter(
         self,
         mocked_annotate,
@@ -312,9 +312,9 @@ class SemanticFilterTests(unittest.TestCase):
         self.assertEqual(section.filtered_count, 2)
         self.assertEqual(mocked_fetch_source_plan.call_count, 2)
 
-    @patch("daily_cli.plugins.enrichers.fetch_item_bodies")
-    @patch("daily_cli.core.pipeline.fetch_source_plan")
-    @patch("daily_cli.core.pipeline.annotate_items")
+    @patch("daily_cli.fetchers.body.fetch_item_bodies")
+    @patch("daily_cli.core.collector.fetch_source_plan")
+    @patch("daily_cli.core.collector.annotate_items")
     def test_body_fetch_only_runs_on_final_kept_items(
         self,
         mocked_annotate,
@@ -360,8 +360,8 @@ class SemanticFilterTests(unittest.TestCase):
         self.assertEqual(mocked_fetch_bodies.call_args.kwargs["timeout"], 3.0)
         self.assertEqual(mocked_fetch_bodies.call_args.kwargs["max_chars"], 1000)
 
-    @patch("daily_cli.core.pipeline.fetch_source_plan")
-    @patch("daily_cli.core.pipeline.annotate_items")
+    @patch("daily_cli.core.collector.fetch_source_plan")
+    @patch("daily_cli.core.collector.annotate_items")
     def test_us_hot_skips_google_news_refill_when_enough_items_remain(
         self,
         mocked_annotate,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..runtime.semantic import MODEL_REPO_ID, TFIDF_BACKEND_ID, get_semantic_labeler, list_filter_backends
+from .semantic import MODEL_REPO_ID, TFIDF_BACKEND_ID, get_semantic_labeler, list_filter_backends
 
 
 @dataclass(frozen=True)

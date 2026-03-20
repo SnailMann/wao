@@ -5,28 +5,23 @@ import getpass
 import json
 from textwrap import dedent
 
-from . import __version__
-from .core.pipeline import collect_search, collect_summary, collect_topic_specs
-from .core.x_auth import (
+from .. import __version__
+from ..common.output import render_json, render_text
+from ..core.collector import collect_summary, collect_topics
+from ..core.topics import DEFAULT_SUMMARY_TOPICS, list_topic_keys, list_topics
+from ..core.x_auth import (
     clear_saved_x_bearer_token,
     resolve_x_bearer_token,
     save_x_bearer_token,
     x_token_file,
 )
-from .core.subscriptions import (
-    add_subscription,
-    build_preview_topic,
-    build_subscription_topic,
-    load_subscriptions,
-    remove_subscription,
-    resolve_subscriptions,
-)
-from .core.topics import DEFAULT_SUMMARY_TOPICS, SEARCH_SOURCE_CHOICES, get_topic, list_topic_keys, list_topics
-from .plugins.filters import list_filter_modes
-from .renderers.output import render_json, render_text
-from .runtime.semantic import MODEL_REPO_ID, SemanticError, download_model, list_content_labels
-from .runtime.sources import FetchError
-from .runtime.x_api import fetch_x_usage
+from ..fetchers.common import FetchError
+from ..fetchers.x import fetch_x_usage
+from ..plugins.semantic import MODEL_REPO_ID, SemanticError, download_model, list_content_labels
+from ..plugins.filters import list_filter_modes
+from ..tools.rss import add_subscription, collect_rss, load_subscriptions, pull_saved_rss, remove_subscription
+from ..tools.search import SEARCH_SOURCE_CHOICES, collect_search
+from ..tools.trend import TREND_SOURCE_CHOICES, collect_trends
 
 
 def positive_int(value: str) -> int:
@@ -55,32 +50,38 @@ def _top_level_help() -> str:
     return dedent(
         f"""\
         daily
-          一个面向 Linux / macOS 的资讯命令行工具，聚合 Google、Baidu、GitHub、X 与 RSS/Atom 的公开信息源。
+          一个分层设计的资讯 CLI：原子能力负责抓取，组合命令负责业务编排。
 
-        Commands:
-          topics
-            列出全部 topic、默认来源、默认数量和默认过滤策略。
+        Atomic commands:
+          trend
+            统一查看热榜源：Google Trends、百度热榜、GitHub Trending。
+          search <query>
+            统一检索新闻、帖子与 X 用户公开发推。
+          rss
+            统一处理 RSSHub 与普通 RSS/Atom：一次性抓取或保存后批量拉取。
           x
             配置或查看 X Bearer Token。
-          subscriptions
-            管理 RSSHub 与普通 RSS/Atom 订阅，支持 add/list/fetch/remove/preview。
+          model download
+            下载 model 过滤模式所需模型；只用 tfidf 时可跳过。
+
+        Workflow commands:
+          topics
+            列出业务 topic、默认来源、默认数量和默认过滤策略。
           summary
             输出默认 dashboard: {_default_summary()}
           fetch <topic ...>
-            拉取一个或多个指定 topic。
-          search <query>
-            用 Google News、X Search、X User Posts 或 X News Search 检索最新相关资讯。
-          model download
-            下载 model 模式所需模型；只用 tfidf 时可跳过。
+            拉取一个或多个业务 topic。
 
         Topics:
           {_topic_summary()}
 
-        Common options:
+        Atomic source switches:
+          trend: --source google|baidu|github|all
+          search: --source google|x|x-user|x-news|all
+
+        Common output options:
           --source auto|google|baidu|github|all
-            指定来源；默认按 topic 自己的默认配置选择。
-          search 专用来源: google|x|x-user|x-news|all
-            `daily search` 可额外切换 X recent search、X 用户发推和 X News Search。
+            用于组合 topic 的来源选择；原子命令请看各自的专用来源选项。
           --limit N
             控制每个 section 返回条数。
           --timeout SECONDS
@@ -112,20 +113,17 @@ def _top_level_help() -> str:
           us-hot 过滤后不足时，会按需用 Google News Top Stories 回补。
 
         Examples:
-          daily summary
-          daily summary --filter-mode tfidf --limit 5
-          daily x login
-          daily x status
-          daily search elonmusk --source x-user
-          daily subscriptions add rsshub://twitter/user/elonmusk --name Elon
-          daily subscriptions add https://36kr.com/feed --name 36kr
-          daily subscriptions fetch
-          daily fetch us-hot china-hot --exclude-label soft
-          daily fetch github --limit 10 --format json
-          daily fetch us-hot --fetch-body --body-max-chars 3000
-          daily search "人工智能" --google-locale cn
+          daily trend
+          daily trend --source baidu --limit 20
           daily search "OpenAI" --source x
-          daily search "AI" --source x-news
+          daily search elonmusk --source x-user
+          daily rss fetch https://36kr.com/feed
+          daily rss add rsshub://twitter/user/elonmusk --name Elon
+          daily rss pull
+          daily summary
+          daily fetch us-hot china-hot --exclude-label soft
+          daily fetch us-hot --fetch-body --body-max-chars 3000
+          daily x login
           daily model download
 
         More:
@@ -134,7 +132,12 @@ def _top_level_help() -> str:
     )
 
 
-def add_common_fetch_args(parser: argparse.ArgumentParser, *, include_source: bool = True) -> None:
+def add_common_fetch_args(
+    parser: argparse.ArgumentParser,
+    *,
+    include_source: bool = True,
+    exclude_label_help: str = "追加需要过滤掉的语义标签；不传时仅 us-hot/china-hot 默认过滤 soft。",
+) -> None:
     if include_source:
         parser.add_argument(
             "--source",
@@ -171,7 +174,7 @@ def add_common_fetch_args(parser: argparse.ArgumentParser, *, include_source: bo
         action="append",
         choices=list_content_labels(),
         default=None,
-        help="追加需要过滤掉的语义标签；不传时仅 us-hot/china-hot 默认过滤 soft。",
+        help=exclude_label_help,
     )
     parser.add_argument(
         "--no-filter",
@@ -302,6 +305,34 @@ def build_parser() -> argparse.ArgumentParser:
         help="输出格式。",
     )
 
+    trend_parser = subparsers.add_parser(
+        "trend",
+        help="统一查看热榜源。",
+        description=dedent(
+            """\
+            原子热榜能力，统一查看 Google Trends、百度热榜和 GitHub Trending。
+
+            示例:
+              daily trend
+              daily trend --source google
+              daily trend --source baidu --limit 20
+              daily trend --source all --format json
+            """
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    trend_parser.add_argument(
+        "--source",
+        choices=TREND_SOURCE_CHOICES,
+        default="auto",
+        help="trend 可用来源：google、baidu、github 或 all；默认 auto=all。",
+    )
+    add_common_fetch_args(
+        trend_parser,
+        include_source=False,
+        exclude_label_help="追加需要过滤掉的语义标签；trend 默认不自动过滤，传入后才会分类拦截。",
+    )
+
     x_parser = subparsers.add_parser(
         "x",
         help="配置或查看 X Bearer Token。",
@@ -344,93 +375,101 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    subscriptions_parser = subparsers.add_parser(
-        "subscriptions",
-        help="管理 RSSHub 与普通 RSS/Atom 订阅。",
+    rss_parser = subparsers.add_parser(
+        "rss",
+        help="统一处理 RSSHub 与普通 RSS/Atom。",
         description=dedent(
             """\
-            管理 RSSHub 与普通 RSS/Atom 订阅。
+            原子 RSS 能力，支持一次性抓取和持久化订阅管理。
 
             示例:
-              daily subscriptions add rsshub://twitter/user/elonmusk --name Elon
-              daily subscriptions add https://36kr.com/feed --name 36kr
-              daily subscriptions list
-              daily subscriptions fetch
-              daily subscriptions preview rsshub://twitter/user/elonmusk
+              daily rss fetch rsshub://twitter/user/elonmusk
+              daily rss fetch https://36kr.com/feed
+              daily rss add rsshub://twitter/user/elonmusk --name Elon
+              daily rss list
+              daily rss pull
             """
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    subscriptions_subparsers = subscriptions_parser.add_subparsers(
-        dest="subscriptions_command",
+    rss_subparsers = rss_parser.add_subparsers(
+        dest="rss_command",
         required=True,
     )
 
-    subscriptions_add_parser = subscriptions_subparsers.add_parser(
+    rss_fetch_parser = rss_subparsers.add_parser(
+        "fetch",
+        help="一次性抓取一条 RSSHub 或 RSS/Atom feed，不写入本地配置。",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    rss_fetch_parser.add_argument(
+        "subscription_uri",
+        help="订阅地址，例如 rsshub://twitter/user/elonmusk 或 https://36kr.com/feed",
+    )
+    rss_fetch_parser.add_argument("--name", default=None, help="可读名称；默认使用订阅地址。")
+    rss_fetch_parser.add_argument(
+        "--instance",
+        default=None,
+        help="RSSHub 实例地址；默认使用 https://rsshub.app。",
+    )
+    add_common_fetch_args(
+        rss_fetch_parser,
+        include_source=False,
+        exclude_label_help="追加需要过滤掉的语义标签；rss 默认不自动过滤，传入后才会分类拦截。",
+    )
+
+    rss_add_parser = rss_subparsers.add_parser(
         "add",
         help="新增一条订阅。",
         description="保存一条 RSSHub 或普通 RSS/Atom 订阅。",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    subscriptions_add_parser.add_argument(
+    rss_add_parser.add_argument(
         "subscription_uri",
         help="订阅地址，例如 rsshub://twitter/user/elonmusk 或 https://36kr.com/feed",
     )
-    subscriptions_add_parser.add_argument("--name", default=None, help="可读名称；默认使用订阅地址。")
-    subscriptions_add_parser.add_argument(
+    rss_add_parser.add_argument("--name", default=None, help="可读名称；默认使用订阅地址。")
+    rss_add_parser.add_argument(
         "--instance",
         default=None,
         help="RSSHub 实例地址；默认使用 https://rsshub.app。",
     )
 
-    subscriptions_list_parser = subscriptions_subparsers.add_parser(
+    rss_list_parser = rss_subparsers.add_parser(
         "list",
         help="列出已保存的订阅。",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    subscriptions_list_parser.add_argument(
+    rss_list_parser.add_argument(
         "--format",
         choices=("text", "json"),
         default="text",
         help="输出格式。",
     )
 
-    subscriptions_remove_parser = subscriptions_subparsers.add_parser(
+    rss_remove_parser = rss_subparsers.add_parser(
         "remove",
         help="删除一条订阅。",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    subscriptions_remove_parser.add_argument("key", help="订阅 key，可通过 `daily subscriptions list` 查看。")
+    rss_remove_parser.add_argument("key", help="订阅 key，可通过 `daily rss list` 查看。")
 
-    subscriptions_fetch_parser = subscriptions_subparsers.add_parser(
-        "fetch",
+    rss_pull_parser = rss_subparsers.add_parser(
+        "pull",
         help="拉取已保存的订阅。",
         description="不传 key 时默认拉取全部订阅。",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    subscriptions_fetch_parser.add_argument(
+    rss_pull_parser.add_argument(
         "subscriptions",
         nargs="*",
         help="要拉取的订阅 key；不传时拉取全部。",
     )
-    add_common_fetch_args(subscriptions_fetch_parser, include_source=False)
-
-    subscriptions_preview_parser = subscriptions_subparsers.add_parser(
-        "preview",
-        help="预览一条订阅，不写入本地配置。",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+    add_common_fetch_args(
+        rss_pull_parser,
+        include_source=False,
+        exclude_label_help="追加需要过滤掉的语义标签；rss 默认不自动过滤，传入后才会分类拦截。",
     )
-    subscriptions_preview_parser.add_argument(
-        "subscription_uri",
-        help="订阅地址，例如 rsshub://twitter/user/elonmusk 或 https://36kr.com/feed",
-    )
-    subscriptions_preview_parser.add_argument("--name", default=None, help="可读名称；默认使用订阅地址。")
-    subscriptions_preview_parser.add_argument(
-        "--instance",
-        default=None,
-        help="RSSHub 实例地址；默认使用 https://rsshub.app。",
-    )
-    add_common_fetch_args(subscriptions_preview_parser, include_source=False)
 
     model_parser = subparsers.add_parser(
         "model",
@@ -565,6 +604,23 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  exclude={excluded}")
             return 0
 
+        if args.command == "trend":
+            sections = collect_trends(
+                source=args.source,
+                limit=args.limit,
+                timeout=args.timeout,
+                semantic_enabled=not args.no_semantic,
+                semantic_filter=not args.no_semantic and not args.no_filter,
+                excluded_labels=tuple(args.exclude_label) if args.exclude_label else None,
+                semantic_model_dir=args.semantic_model_dir,
+                filter_mode=args.filter_mode,
+                fetch_body=args.fetch_body,
+                body_timeout=args.body_timeout,
+                body_max_chars=args.body_max_chars,
+            )
+            print(emit_output(args.format, sections), end="")
+            return 0
+
         if args.command == "x":
             if args.x_command == "login":
                 token = (args.token or "").strip()
@@ -619,8 +675,27 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"路径: {x_token_file()}")
                 return 0
 
-        if args.command == "subscriptions":
-            if args.subscriptions_command == "add":
+        if args.command == "rss":
+            if args.rss_command == "fetch":
+                section = collect_rss(
+                    args.subscription_uri,
+                    name=args.name,
+                    instance=args.instance,
+                    limit=args.limit,
+                    timeout=args.timeout,
+                    semantic_enabled=not args.no_semantic,
+                    semantic_filter=not args.no_semantic and not args.no_filter,
+                    excluded_labels=tuple(args.exclude_label) if args.exclude_label else None,
+                    semantic_model_dir=args.semantic_model_dir,
+                    filter_mode=args.filter_mode,
+                    fetch_body=args.fetch_body,
+                    body_timeout=args.body_timeout,
+                    body_max_chars=args.body_max_chars,
+                )
+                print(emit_output(args.format, [section]), end="")
+                return 0
+
+            if args.rss_command == "add":
                 subscription = add_subscription(
                     args.subscription_uri,
                     name=args.name,
@@ -633,7 +708,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"路由: {subscription.route}")
                 return 0
 
-            if args.subscriptions_command == "list":
+            if args.rss_command == "list":
                 subscriptions = load_subscriptions()
                 if args.format == "json":
                     payload = {"subscriptions": [item.to_dict() for item in subscriptions]}
@@ -648,19 +723,14 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"  instance={item.instance}")
                 return 0
 
-            if args.subscriptions_command == "remove":
+            if args.rss_command == "remove":
                 removed = remove_subscription(args.key)
                 print(f"已删除订阅: {removed.key}")
                 return 0
 
-            if args.subscriptions_command == "fetch":
-                subscriptions = resolve_subscriptions(args.subscriptions)
-                if not subscriptions:
-                    print("暂无订阅")
-                    return 0
-                sections = collect_topic_specs(
-                    [build_subscription_topic(item) for item in subscriptions],
-                    source="auto",
+            if args.rss_command == "pull":
+                sections = pull_saved_rss(
+                    args.subscriptions,
                     limit=args.limit,
                     timeout=args.timeout,
                     semantic_enabled=not args.no_semantic,
@@ -672,31 +742,10 @@ def main(argv: list[str] | None = None) -> int:
                     body_timeout=args.body_timeout,
                     body_max_chars=args.body_max_chars,
                 )
+                if not sections:
+                    print("暂无订阅")
+                    return 0
                 print(emit_output(args.format, sections), end="")
-                return 0
-
-            if args.subscriptions_command == "preview":
-                section = collect_topic_specs(
-                    [
-                        build_preview_topic(
-                            args.subscription_uri,
-                            name=args.name,
-                            instance=args.instance,
-                        )
-                    ],
-                    source="auto",
-                    limit=args.limit,
-                    timeout=args.timeout,
-                    semantic_enabled=not args.no_semantic,
-                    semantic_filter=not args.no_semantic and not args.no_filter,
-                    excluded_labels=tuple(args.exclude_label) if args.exclude_label else None,
-                    semantic_model_dir=args.semantic_model_dir,
-                    filter_mode=args.filter_mode,
-                    fetch_body=args.fetch_body,
-                    body_timeout=args.body_timeout,
-                    body_max_chars=args.body_max_chars,
-                )[0]
-                print(emit_output(args.format, [section]), end="")
                 return 0
 
         if args.command == "model" and args.model_command == "download":
@@ -724,8 +773,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "fetch":
-            sections = collect_topic_specs(
-                [get_topic(key) for key in args.topics],
+            sections = collect_topics(
+                args.topics,
                 source=args.source,
                 limit=args.limit,
                 timeout=args.timeout,

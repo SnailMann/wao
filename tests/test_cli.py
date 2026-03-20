@@ -32,10 +32,13 @@ class CliParserTests(unittest.TestCase):
         self.assertIn("--source auto|google|baidu|github|all", help_text)
         self.assertIn("--exclude-label macro|industry|tech|public|soft", help_text)
         self.assertIn("--fetch-body", help_text)
+        self.assertIn("trend", help_text)
+        self.assertIn("rss", help_text)
         self.assertIn("daily summary", help_text)
         self.assertIn("topics", help_text)
-        self.assertIn("subscriptions", help_text)
         self.assertIn("daily x login", help_text)
+        self.assertIn("daily trend", help_text)
+        self.assertIn("daily rss fetch https://36kr.com/feed", help_text)
         self.assertIn("daily search \"OpenAI\" --source x", help_text)
         self.assertIn("daily search elonmusk --source x-user", help_text)
         self.assertNotIn("daily x fetch", help_text)
@@ -44,11 +47,17 @@ class CliParserTests(unittest.TestCase):
         args = build_parser().parse_args(["topics"])
         self.assertEqual(args.command, "topics")
 
-    def test_subscriptions_preview_accepts_common_fetch_args(self) -> None:
+    def test_trend_accepts_source(self) -> None:
+        args = build_parser().parse_args(["trend", "--source", "baidu", "--limit", "3"])
+        self.assertEqual(args.command, "trend")
+        self.assertEqual(args.source, "baidu")
+        self.assertEqual(args.limit, 3)
+
+    def test_rss_fetch_accepts_common_fetch_args(self) -> None:
         args = build_parser().parse_args(
             [
-                "subscriptions",
-                "preview",
+                "rss",
+                "fetch",
                 "rsshub://twitter/user/elonmusk",
                 "--limit",
                 "3",
@@ -56,17 +65,17 @@ class CliParserTests(unittest.TestCase):
                 "tfidf",
             ]
         )
-        self.assertEqual(args.command, "subscriptions")
-        self.assertEqual(args.subscriptions_command, "preview")
+        self.assertEqual(args.command, "rss")
+        self.assertEqual(args.rss_command, "fetch")
         self.assertEqual(args.limit, 3)
         self.assertEqual(args.filter_mode, "tfidf")
 
-    def test_subscriptions_add_accepts_plain_feed_url(self) -> None:
+    def test_rss_add_accepts_plain_feed_url(self) -> None:
         args = build_parser().parse_args(
-            ["subscriptions", "add", "https://36kr.com/feed", "--name", "36kr"]
+            ["rss", "add", "https://36kr.com/feed", "--name", "36kr"]
         )
-        self.assertEqual(args.command, "subscriptions")
-        self.assertEqual(args.subscriptions_command, "add")
+        self.assertEqual(args.command, "rss")
+        self.assertEqual(args.rss_command, "add")
         self.assertEqual(args.subscription_uri, "https://36kr.com/feed")
 
     def test_x_login_command_exists(self) -> None:

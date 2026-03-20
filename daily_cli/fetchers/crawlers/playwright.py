@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import re
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 
-from ..core.models import NewsItem
+from .base import BodyCrawler, CrawlResult, CrawlerError
 
 BODY_RESOURCE_SKIP_TYPES = {"font", "image", "media"}
 DEFAULT_BODY_USER_AGENT = (
@@ -89,17 +89,13 @@ BAIDU_RESULT_SCRIPT = """
 """
 
 
-class BodyFetchError(RuntimeError):
-    """Raised when Playwright正文抓取不可用。"""
-
-
 def _load_playwright():
     try:
         from playwright.sync_api import Error as PlaywrightError
         from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
         from playwright.sync_api import sync_playwright
     except ImportError as exc:
-        raise BodyFetchError(
+        raise CrawlerError(
             "正文抓取依赖未安装，请先执行 `python3 -m pip install .[body]`。"
         ) from exc
     return sync_playwright, PlaywrightError, PlaywrightTimeoutError
@@ -224,70 +220,78 @@ def _extract_body_inner_text(page) -> str:
         return ""
 
 
-def fetch_item_bodies(
-    items: list[NewsItem],
-    timeout: float,
-    max_chars: int,
-) -> list[NewsItem]:
-    if not items:
-        return items
+class PlaywrightBodyCrawler(BodyCrawler):
+    """Reusable Playwright crawler for article/body extraction."""
 
-    sync_playwright, PlaywrightError, PlaywrightTimeoutError = _load_playwright()
-    timeout_ms = int(timeout * 1000)
+    def __init__(self, *, user_agent: str = DEFAULT_BODY_USER_AGENT) -> None:
+        self._user_agent = user_agent
+        self._playwright = None
+        self._browser = None
+        self._context = None
+        self._playwright_error = None
+        self._playwright_timeout_error = None
 
-    try:
-        with sync_playwright() as playwright:
-            try:
-                browser = playwright.chromium.launch(headless=True)
-            except PlaywrightError as exc:
-                raise BodyFetchError(
-                    "Playwright Chromium 不可用，请先执行 `python3 -m playwright install chromium`。"
-                ) from exc
+    def __enter__(self) -> "PlaywrightBodyCrawler":
+        if self._context is not None:
+            return self
 
-            context = browser.new_context(
-                ignore_https_errors=True,
-                user_agent=DEFAULT_BODY_USER_AGENT,
-            )
-            try:
-                for item in items:
-                    item.body_text = ""
-                    item.body_url = ""
-                    item.body_error = ""
+        sync_playwright, playwright_error, playwright_timeout_error = _load_playwright()
+        self._playwright_error = playwright_error
+        self._playwright_timeout_error = playwright_timeout_error
 
-                    if not item.link or not item.link.startswith("http"):
-                        item.body_error = "缺少可抓取链接"
-                        continue
+        self._playwright = sync_playwright().start()
+        try:
+            self._browser = self._playwright.chromium.launch(headless=True)
+        except playwright_error as exc:
+            self.close()
+            raise CrawlerError(
+                "Playwright Chromium 不可用，请先执行 `python3 -m playwright install chromium`。"
+            ) from exc
 
-                    page = context.new_page()
-                    try:
-                        _prepare_page(page)
-                        resolved_url = _resolve_article_url(page, item.link, timeout_ms)
-                        payload = _extract_payload_with_retry(page, PlaywrightError, timeout_ms)
-                        body_text = _normalize_body_text(payload.get("text", ""), max_chars=max_chars)
-                        item.body_url = payload.get("url") or resolved_url or item.link
-                        page_title = payload.get("title", "")
-                        if not body_text:
-                            body_text = _normalize_body_text(_extract_body_inner_text(page), max_chars=max_chars)
-                        if _looks_like_browser_error_url(item.body_url):
-                            item.body_error = "浏览器未能打开目标页面"
-                        elif _looks_like_verification_page(body_text, item.body_url, page_title):
-                            item.body_error = "命中站点验证或验证码页"
-                        elif not body_text:
-                            item.body_error = "正文为空"
-                        else:
-                            item.body_text = body_text
-                    except PlaywrightTimeoutError:
-                        item.body_error = f"抓取超时（>{timeout:.1f}s）"
-                    except PlaywrightError as exc:
-                        item.body_error = str(exc).splitlines()[0][:160]
-                    finally:
-                        page.close()
-            finally:
-                context.close()
-                browser.close()
-    except BodyFetchError:
-        raise
-    except Exception as exc:  # pragma: no cover - defensive fallback
-        raise BodyFetchError(f"正文抓取失败: {exc}") from exc
+        self._context = self._browser.new_context(
+            ignore_https_errors=True,
+            user_agent=self._user_agent,
+        )
+        return self
 
-    return items
+    def close(self) -> None:
+        if self._context is not None:
+            self._context.close()
+            self._context = None
+        if self._browser is not None:
+            self._browser.close()
+            self._browser = None
+        if self._playwright is not None:
+            self._playwright.stop()
+            self._playwright = None
+
+    def fetch(self, url: str, *, timeout: float, max_chars: int) -> CrawlResult:
+        if self._context is None:
+            self.__enter__()
+
+        timeout_ms = int(timeout * 1000)
+        page = self._context.new_page()
+        try:
+            _prepare_page(page)
+            resolved_url = _resolve_article_url(page, url, timeout_ms)
+            payload = _extract_payload_with_retry(page, self._playwright_error, timeout_ms)
+            body_text = _normalize_body_text(payload.get("text", ""), max_chars=max_chars)
+            body_url = payload.get("url") or resolved_url or url
+            page_title = payload.get("title", "")
+
+            if not body_text:
+                body_text = _normalize_body_text(_extract_body_inner_text(page), max_chars=max_chars)
+
+            if _looks_like_browser_error_url(body_url):
+                return CrawlResult(url=body_url, error="浏览器未能打开目标页面")
+            if _looks_like_verification_page(body_text, body_url, page_title):
+                return CrawlResult(url=body_url, error="命中站点验证或验证码页")
+            if not body_text:
+                return CrawlResult(url=body_url, error="正文为空")
+            return CrawlResult(text=body_text, url=body_url, error="")
+        except self._playwright_timeout_error:
+            return CrawlResult(url=url, error=f"抓取超时（>{timeout:.1f}s）")
+        except self._playwright_error as exc:
+            return CrawlResult(url=url, error=str(exc).splitlines()[0][:160])
+        finally:
+            page.close()

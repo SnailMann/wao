@@ -4,9 +4,9 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 import re
 
-from .config import default_config_dir, read_json_file, write_json_file
-from ..runtime.rsshub import parse_feed_url, parse_rsshub_uri
-from .topics import SourcePlan, TopicSpec
+from ..common.config import default_config_dir, read_json_file, write_json_file
+from ..fetchers.rss import parse_feed_url, parse_rsshub_uri
+from .specs import CollectionSpec, SourcePlan, TopicSpec
 
 
 @dataclass(frozen=True)
@@ -153,7 +153,7 @@ def resolve_subscriptions(keys: list[str] | tuple[str, ...] | None = None) -> li
 
 def build_subscription_topic(subscription: SubscriptionSpec) -> TopicSpec:
     if subscription.kind == "feed":
-        return TopicSpec(
+        return CollectionSpec(
             key=subscription.key,
             label=f"订阅: {subscription.label}",
             description=f"RSS/Atom 订阅 {subscription.feed_url}",
@@ -169,7 +169,7 @@ def build_subscription_topic(subscription: SubscriptionSpec) -> TopicSpec:
             default_excluded_labels=(),
         )
 
-    return TopicSpec(
+    return CollectionSpec(
         key=subscription.key,
         label=f"订阅: {subscription.label}",
         description=f"RSSHub 订阅 {subscription.route} ({subscription.instance})",

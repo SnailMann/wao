@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 import xml.etree.ElementTree as ET
 
 from ..core.models import NewsItem
-from .sources import FetchError, fetch_text, format_pub_date, strip_html
+from .common import FetchError, fetch_text, format_pub_date, strip_html
 
 DEFAULT_RSSHUB_INSTANCE = "https://rsshub.app"
 

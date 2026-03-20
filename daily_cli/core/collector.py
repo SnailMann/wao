@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+"""Shared orchestration for topics, search, trend, and RSS collections."""
+
 from dataclasses import dataclass
 
-from ..plugins.enrichers import enrich_sections_with_body
+from ..fetchers.body import enrich_sections_with_body
+from ..fetchers.common import FetchError, contains_cjk, local_now_string, normalize_title
+from ..fetchers.registry import dedupe_source_items, fetch_source_plan
 from ..plugins.filters import annotate_items, get_filter_plugin
-from ..plugins.providers import dedupe_source_items, fetch_source_plan
-from ..runtime.sources import FetchError, contains_cjk, local_now_string, normalize_title
 from .models import NewsItem, SectionResult
 from .topics import (
     DEFAULT_SUMMARY_TOPICS,
