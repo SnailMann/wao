@@ -8,6 +8,8 @@ metadata: {"openclaw":{"os":["darwin","linux"],"requires":{"bins":["python3"]}}}
 
 Use this skill when the user wants to install, configure, troubleshoot, or operate the `wao` CLI from this repository checkout.
 
+Install this skill as a workflow skill in OpenClaw. Do not install it as a reference-only skill, because this skill is intended to run commands, install dependencies, and operate the local `wao` CLI.
+
 Assumptions:
 
 - `{baseDir}` is the root of the `wao` repository and contains `pyproject.toml`.
@@ -15,6 +17,11 @@ Assumptions:
 - Use `python3` consistently for `-m pip` and `-m playwright`.
 
 ## Install
+
+OpenClaw installation requirement:
+
+- Register or install this directory as a workflow skill.
+- The skill needs command execution against the local repository, so a reference-only installation is not sufficient.
 
 Preferred one-command install:
 
