@@ -61,6 +61,22 @@
 
 要求 Python `3.10+`。
 
+一键安装脚本：
+
+```bash
+bash scripts/install.sh simple
+bash scripts/install.sh full
+```
+
+- `simple`
+  - 仅安装 `wao` 基础依赖
+- `full`
+  - 安装全部可选依赖
+  - 安装 Playwright Chromium
+  - 下载 `model` 过滤模式需要的模型
+
+手动安装：
+
 基础安装：
 
 ```bash

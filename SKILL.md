@@ -16,6 +16,25 @@ Assumptions:
 
 ## Install
 
+Preferred one-command install:
+
+```bash
+cd {baseDir}
+bash scripts/install.sh simple
+```
+
+or:
+
+```bash
+cd {baseDir}
+bash scripts/install.sh full
+```
+
+- `simple` installs only the required base dependencies.
+- `full` installs `.[all]`, Playwright Chromium, and downloads the semantic model assets.
+
+Manual install flow:
+
 1. Verify the repository and interpreter:
 
 ```bash
